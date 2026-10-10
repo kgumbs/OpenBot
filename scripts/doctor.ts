@@ -60,6 +60,15 @@ export function intelligenceCheck(probe: Probe): Check {
   return { ...base, status: "warn", message: "Intelligence readiness could not be established.", action: "Check Intelligence availability and runtime entitlement status in OpenBot." };
 }
 
+export function browserImageCheck(id: string, runningDigest: string, expectedDigest: string): Check {
+  const validDigest = (value: string) => /^sha256:[a-f0-9]{64}$/.test(value);
+  if (!validDigest(runningDigest) || !validDigest(expectedDigest))
+    return { id: `browser.${id}.image`, status: "warn", message: "Browser image freshness could not be verified.", action: "Check the configured local image and Docker metadata. Doctor does not pull images or recreate containers." };
+  if (runningDigest === expectedDigest)
+    return { id: `browser.${id}.image`, status: "pass", message: "Browser container uses the currently configured local image." };
+  return { id: `browser.${id}.image`, status: "warn", message: "Browser container uses an older or different image than the configured local image.", action: "Schedule recreation of this computer after active work finishes, preserving its named volumes. Ordinary --restart keeps Bot computers running; see docs/local-rebuild.md." };
+}
+
 export function desktopCheck(probe: Probe, processRunning: boolean | undefined): Check {
   if (probe.status !== 200 || typeof probe.body?.connected !== "boolean")
     return { id: "desktop", status: "warn", message: "Native folder broker status is unavailable.", action: "Check API health and sign-in before diagnosing folder permissions." };
@@ -157,7 +166,15 @@ export async function doctor(options: { root: string; timeout?: number; profile?
       if (shared.code !== 0 || owned.code !== 0) add("browser.storage", "warn", "Browser container discovery is unavailable.");
       else if (!ids.length) add("browser.storage", "warn", "No computer containers are available for a storage/sandbox check.");
       else {
+        const image = profile === "subscriptions" ? "openbot-agent-computer:sandbox-local" : env.COMPUTER_IMAGE?.trim() || "openbot-agent-computer:latest";
+        const imageResult = /^[a-zA-Z0-9][a-zA-Z0-9./:_@-]{0,255}$/.test(image)
+          ? await deps.command(["docker", "image", "inspect", "--format", "{{.Id}}", image], timeout)
+          : { code: -1, out: "" };
+        const expectedDigest = imageResult.code === 0 ? imageResult.out.trim() : "";
         for (const id of ids.slice(0, 32)) {
+          // Select only the image digest: never inspect container environment or credentials.
+          const currentImage = await deps.command(["docker", "container", "inspect", "--format", "{{.Image}}", id], timeout);
+          checks.push(browserImageCheck(id, currentImage.code === 0 ? currentImage.out.trim() : "", expectedDigest));
           const result = await deps.command(["docker", "exec", id, "sh", "-c", 'test -w /profiles && test -w /workspace && printf "writable\\n"; id -u; if [ "$COMPUTER_SANDBOX" = on ]; then printf "sandbox-on\\n"; fi'], timeout);
           const lines = result.out.trim().split("\n");
           add(`browser.${id}.storage`, result.code === 0 && lines.includes("writable") ? "pass" : "fail", result.code === 0 && lines.includes("writable") ? "Browser storage is writable by its runtime user." : "Browser storage is not writable or its container is stopped.", result.code === 0 && lines.includes("writable") ? undefined : "Preview this computer's named volumes with repair-browser-storage.command CONTAINER_ID; see docs/browser-storage-repair.md. Preserve its data and sandboxing.");

@@ -24,3 +24,7 @@ Regression tests:
 ```sh
 .env.tools/bun/bin/bun test scripts/doctor.test.ts
 ```
+
+Browser image freshness is checked separately from health, storage access, and sandbox configuration. Doctor compares each discovered computer's image digest with the configured local image tag (the sandbox image in the subscription profile; `COMPUTER_IMAGE` or the standard default otherwise). Matching digests pass; mismatches and unavailable/malformed metadata are warnings and produce degraded readiness. This reads only Docker's image ID fields, without pulling images or inspecting container environment values. It compares against local configuration, not the newest upstream release or unbuilt source edits.
+
+A mismatch means the container uses an older or different image; it does not prove a service failure. Schedule recreation after active work finishes, retaining named browser/workspace volumes. The ordinary restart deliberately keeps supervisor-owned computers running, so it does not necessarily activate a rebuilt browser image. See [local rebuild instructions](local-rebuild.md).

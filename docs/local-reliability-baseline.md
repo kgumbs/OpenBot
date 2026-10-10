@@ -110,3 +110,16 @@ the Doctor implementation so failures have a clear cause.
 
 The optional local-model profile follows the reliability work and must retain the
 working subscription configuration until chat, tool use, and persistence are verified.
+
+## Progress since this checkpoint
+
+The original verification and limitations above describe the pre-improvement snapshot. The reliability branch now includes:
+
+- Read-only Doctor diagnostics with human/JSON output and bounded probes.
+- Startup readiness checks, clone-specific desktop detection, and explicit restart.
+- Actionable protected-folder error messages with private paths omitted.
+- Preview-first, scoped browser-volume ownership repair with disposable-volume integration coverage.
+- Local source rebuild plans and persistent Rust tooling for this workstation.
+- Browser image freshness checks to identify rebuilt images awaiting container recreation.
+
+Remaining work includes reviewing pending upstream changes, providing a managed way to recreate individual Bot computers while preserving volumes, and evaluating the optional local-model profile. The subscription and managed Intelligence configuration remains the working baseline.

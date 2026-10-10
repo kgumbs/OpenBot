@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { doctor, desktopCheck, intelligenceCheck, report, dependencies, type Dependencies } from "./doctor";
+import { doctor, desktopCheck, intelligenceCheck, report, dependencies, browserImageCheck, type Dependencies } from "./doctor";
 
 const root = "/moved/OpenBot";
 function fixture(overrides: Partial<Dependencies> = {}) {
@@ -10,7 +10,7 @@ function fixture(overrides: Partial<Dependencies> = {}) {
     http: async url => ({ status: 200, body: url.endsWith("/info") ? { mode: "intelligence", agents: { bot: {} }, licenseStatus: "valid", runtimeEntitlements: { status: "ready" } } : url.endsWith("/host-access") ? { connected: true, grants: [] } : url.includes(":4212/") ? { ok: true, harness: "claude-agent-sdk" } : { status: "ok" } }),
     command: async args => {
       commands.push(args);
-      return { code: 0, out: args[0] === "ps" ? `${root}/desktop/src-tauri/target/debug/openbot-desktop\n` : args.includes("psql") ? "schema-ready\n" : args.includes("exec") ? "writable\n1000\nsandbox-on\n" : args.includes("agent-computer") ? '[{"ID":"abcdef123456"}]' : args.includes("-a") ? "" : '"29.0.1"' };
+      return { code: 0, out: args.includes("inspect") ? `sha256:${"a".repeat(64)}` : args[0] === "ps" ? `${root}/desktop/src-tauri/target/debug/openbot-desktop\n` : args.includes("psql") ? "schema-ready\n" : args.includes("exec") ? "writable\n1000\nsandbox-on\n" : args.includes("agent-computer") ? '[{"ID":"abcdef123456"}]' : args.includes("-a") ? "" : '"29.0.1"' };
     }, ...overrides,
   };
   return { deps, commands };
@@ -78,4 +78,31 @@ test("stale broker lease does not establish desktop readiness", () => {
 test("exit codes distinguish degraded and failed", () => {
   expect(report([{ id: "x", status: "warn", message: "x" }], "standard").exitCode).toBe(2);
   expect(report([{ id: "x", status: "fail", message: "x" }], "standard").exitCode).toBe(1);
+});
+
+
+test("stale browser image degrades readiness without printing metadata", () => {
+  const r = browserImageCheck("abcdef123456", `sha256:${"a".repeat(64)}`, `sha256:${"b".repeat(64)}`);
+  expect(r.status).toBe("warn");
+  expect(r.action).toContain("preserving its named volumes");
+  expect(report([r], "subscriptions").exitCode).toBe(2);
+});
+test("matching browser image passes", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  expect(browserImageCheck("abcdef123456", digest, digest).status).toBe("pass");
+});
+test("malformed or missing digest is unknown, never fresh", () => {
+  for (const value of ["", "sha256:bad", "private-error-body"]) {
+    const r = browserImageCheck("abcdef123456", value, value);
+    expect(r.status).toBe("warn");
+    expect(JSON.stringify(r)).not.toContain("private-error-body");
+  }
+});
+test("Doctor reads narrow digest fields and warns when a computer needs recreation", async () => {
+  const f = fixture(); const original = f.deps.command;
+  f.deps.command = async (args, timeout) => args[1] === "container" ? { code: 0, out: `sha256:${"b".repeat(64)}` } : original(args, timeout);
+  const r = await doctor({ root }, f.deps);
+  expect(check(r, "browser.abcdef123456.image")?.status).toBe("warn");
+  expect(r.state).toBe("degraded");
+  expect(f.commands.find(a => a[1] === "image")).toContain("{{.Id}}");
 });
