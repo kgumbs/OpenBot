@@ -235,3 +235,5 @@ Select a dedicated folder such as `/Users/kgumbs/development/BotFiles` outside t
 These messages are native desktop code: use the rebuilt executable on the next desktop restart. The existing process continues using its previous version until restarted.
 
 For imported root-owned browser volumes, use the [preview-first storage repair command](browser-storage-repair.md). Healthy running volumes do not need migration.
+
+Use the [local rebuild command](local-rebuild.md) after editing desktop, browser, supervisor, or subscription Bot source. It previews the build plan and uses persistent Rust tooling for native builds.
