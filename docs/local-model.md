@@ -114,3 +114,6 @@ as compliance determinations. No access grants or decision automation were added
 Next: build a repeatable synthetic evidence evaluation before promoting a local
 risk model or expanding its access. Test alternative installed models against the
 same cases; passing basic chat and browser use is insufficient for this role.
+
+See [repeatable local risk evaluation](local-risk-evaluation.md) for the runner,
+rubric, and Qwen/Llama baseline. Neither model passed promotion criteria.
