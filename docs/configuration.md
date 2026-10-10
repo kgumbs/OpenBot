@@ -582,6 +582,13 @@ and `COMPUTER_SANDBOX_TEMPLATE_FILE` beside it; those are set by the Helm chart,
 are covered in [charts/openbot/README.md](../charts/openbot/README.md). The similarly named
 `COMPUTER_SANDBOX` above only toggles Chromium's own process sandbox on a Docker computer.
 
+The Docker supervisor also accepts `COMPUTER_BROWSER_MODES`, a JSON object mapping Bot IDs to
+`headed` or `headless`, for example `{"knowledge-local":"headed"}`. Set this on the supervisor
+service; unmatched Bots use `COMPUTER_BROWSER_MODE`. Invalid mappings are refused before creating a
+computer. The local subscription Compose override enables headed mode only for Knowledge (Local).
+Mode changes require recreating the affected container while retaining its named volumes; a normal
+restart or an image update with the same image does not apply the new environment.
+
 Changing `COMPUTER_BROWSER_MODE` affects new supervised computers. A computer that already exists is
 left running until its image changes or its container is recreated. To apply a mode-only change to
 all computers while preserving their browser profiles and workspaces, apply the new supervisor

@@ -51,3 +51,21 @@ live Bot container, profile, or policy was modified.
 
 Next: apply headed mode to the intended live Bot computer using a scoped update
 that preserves its browser profile, then repeat navigation through OpenBot chat.
+
+## Live Knowledge (Local) verification
+
+The local subscription supervisor now uses `COMPUTER_BROWSER_MODES={"knowledge-local":"headed"}`.
+Only Knowledge's container was recreated, retaining `openbot-profile-knowledge-local` and
+`openbot-workspace-knowledge-local`. The live computer confirms headed mode, sandbox on, UID 1000,
+dropped capabilities, no-new-privileges and the Chromium seccomp policy.
+
+Chat navigation initially encountered the existing handback guard: “Take a fresh browser snapshot
+after handback before acting.” After the Bot took that snapshot, navigation through OpenBot chat
+succeeded and the browser activity displayed the observed title:
+`Breaking News, Latest News and Videos | CNN`. This verifies the main page, not every media feature.
+
+Validation: 34 supervisor unit tests passed and supervisor TypeScript checking passed. The full
+suite's Docker integration test stalled and was interrupted; no integration-suite success is claimed.
+
+Next: improve browser tool error handling so a required fresh snapshot is handled automatically and
+an empty title is not presented as a successful navigation.

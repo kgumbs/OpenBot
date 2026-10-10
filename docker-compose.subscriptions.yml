@@ -16,6 +16,7 @@ services:
   supervisor:
     pull_policy: never
     environment:
+      COMPUTER_BROWSER_MODES: '{"knowledge-local":"headed"}'
       COMPUTER_SANDBOX: "on"
       COMPUTER_IMAGE: openbot-agent-computer:sandbox-local
   agent-chatgpt:

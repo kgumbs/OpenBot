@@ -27,7 +27,26 @@ export function environmentFor(
       `COMPUTER_BROWSER_MODE must be headless or headed, not ${JSON.stringify(env.COMPUTER_BROWSER_MODE)}.`,
     );
   }
-  const browserMode = rawBrowserMode;
+  let overrides: Record<string, unknown> = {};
+  if (env.COMPUTER_BROWSER_MODES?.trim()) {
+    const parsed: unknown = JSON.parse(env.COMPUTER_BROWSER_MODES);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(
+        "COMPUTER_BROWSER_MODES must be a JSON object of Bot IDs to browser modes.",
+      );
+    }
+    overrides = parsed as Record<string, unknown>;
+    for (const [id, mode] of Object.entries(overrides)) {
+      if (!id.trim() || (mode !== "headless" && mode !== "headed")) {
+        throw new Error(
+          "COMPUTER_BROWSER_MODES entries must map nonempty Bot IDs to headless or headed.",
+        );
+      }
+    }
+  }
+  const browserMode = Object.hasOwn(overrides, botId)
+    ? overrides[botId]
+    : rawBrowserMode;
   return [
     `COMPUTER_BOT_ID=${botId}`,
     ...(computerToken ? [`COMPUTER_TOKEN=${computerToken}`] : []),
