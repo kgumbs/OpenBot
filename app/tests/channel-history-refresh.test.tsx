@@ -1205,3 +1205,71 @@ test("a completed partial bubble becomes the durable final answer without remoun
   expect(view.getByText(initial.content)).toBeTruthy();
   expect(runRequests).toHaveLength(1);
 });
+
+test("a newer completed turn cancels the older pending reply repair", async () => {
+  const olderRead = delayedResponse();
+  const newerRead = delayedResponse();
+  const view = mounting(async () =>
+    runRequests.length === 0
+      ? stored([initial])
+      : runRequests.length === 1
+        ? olderRead.promise
+        : newerRead.promise,
+  );
+  await view.findByText(initial.content);
+  const composer = view.getByRole("textbox", { name: "Message" });
+  runEvents = (input) => {
+    const first = runRequests.length === 1;
+    const messageId = first ? "older-reply" : "newer-reply";
+    return [
+      { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
+      { type: "TEXT_MESSAGE_START", messageId, role: "assistant" },
+      {
+        type: "TEXT_MESSAGE_CONTENT",
+        messageId,
+        delta: first ? "Older partial" : "Newer partial",
+      },
+      { type: "TEXT_MESSAGE_END", messageId },
+      { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
+    ];
+  };
+  const user = userEvent.setup({ document: view.container.ownerDocument });
+  await user.type(composer, "First question");
+  await user.click(view.getByRole("button", { name: "Send message" }));
+  await view.findByText("Older partial");
+  await waitFor(() => expect(historyReads).toHaveLength(2));
+  await user.type(composer, "Second question");
+  await user.click(view.getByRole("button", { name: "Send message" }));
+  await view.findByText("Newer partial");
+  await waitFor(() => expect(historyReads).toHaveLength(3));
+  await act(async () =>
+    olderRead.resolve(
+      stored([
+        initial,
+        {
+          id: "older-reply",
+          role: "assistant",
+          content: "Older stale repair must not apply",
+        },
+      ]),
+    ),
+  );
+  await act(async () =>
+    newerRead.resolve(
+      stored([
+        ...(runRequests[1]?.input.messages ?? []),
+        {
+          id: "newer-reply",
+          role: "assistant",
+          content: "Newer complete answer",
+        },
+      ]),
+    ),
+  );
+  await view.findByText("Newer complete answer");
+  expect(view.queryByText("Older stale repair must not apply")).toBeNull();
+  expect(view.getByText("Older partial")).toBeTruthy();
+  expect(view.queryByText("Newer partial")).toBeNull();
+  expect(view.getByRole("textbox", { name: "Message" })).toBe(composer);
+  expect(runRequests).toHaveLength(2);
+});

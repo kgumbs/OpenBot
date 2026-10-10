@@ -168,3 +168,18 @@ Existing activity-echo tests include the expected final-answer history read.
 Validation: 36 related UI/helper tests passed (174 assertions before the additional composer
 assertion); the strengthened focused UI test also passed. App TypeScript checking passed.
 Next: add a regression for cancellation when another turn starts before history repair completes.
+
+## Reply repair cancellation regression
+
+The rendered-chat suite now starts a second turn while the first turn's durable-history read
+is pending. It waits for the second turn to finish, resolves the older read with stale text,
+then resolves the newer read with the complete current answer. Assertions verify the stale text
+never replaces the older bubble, the newer answer repairs normally, and the same composer remains
+mounted with exactly two model runs. Testing after the second run finishes ensures the version
+guard, rather than just `isRunning`, prevents the stale update.
+
+The focused regression fails when the reply-repair version guards are removed. No production
+implementation change was needed. All 37 related tests passed (182 assertions), and app TypeScript
+checking passed.
+
+Next: cover cancellation when the user leaves the channel before a pending repair resolves.
