@@ -267,6 +267,11 @@ export interface ComputerGateway {
   ): Promise<{ cleared: boolean }>;
   /** Move a computer onto the current image, keeping its files and sign-ins. */
   updateComputer(botId: string, actor: ActionActor): Promise<ComputerUpdate>;
+  /** Restart an isolated computer, retaining its profile and workspace. */
+  restartComputer(
+    botId: string,
+    actor: ActionActor,
+  ): Promise<{ restarted: boolean }>;
 }
 
 export function createComputerGateway(
@@ -836,6 +841,23 @@ export function createComputerGateway(
      * fact worth having, and a trail that only records effective actions cannot tell you what somebody
      * tried.
      */
+    async restartComputer(botId: string, actor: ActionActor) {
+      if (provider.isolation !== "per-bot") {
+        throw new ComputerUnavailableError(
+          "Individual restart requires an isolated Bot computer.",
+        );
+      }
+      await provider.stop(botId);
+      await snapshots.clear(botId);
+      await writeControlEvent(auditStore, "computer.stopped", {
+        botId,
+        actor,
+        reason: "browser restart requested; profile and workspace retained",
+      });
+      await locate(botId);
+      return { restarted: true };
+    },
+
     async stopComputer(botId: string, actor: ActionActor) {
       const result = await provider.stop(botId);
       await writeControlEvent(auditStore, "computer.stopped", {

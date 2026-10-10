@@ -1804,3 +1804,53 @@ describe("navigation after browser handback", () => {
     }
   });
 });
+
+test("browser restart preserves profile by stopping and locating without reset, and invalidates refs", async () => {
+  const { provider, fetchImpl, calls, addressedAs } = fakeComputer();
+  const snapshots = createInMemorySnapshotStore();
+  const { store, rows } = fakeAudit();
+  const gateway = createComputerGateway({
+    provider,
+    fetchImpl,
+    snapshots,
+    auditStore: store,
+  });
+  await gateway.snapshot("bot-1");
+  expect(await snapshots.load("bot-1")).toBeDefined();
+  expect(await gateway.restartComputer("bot-1", ACTOR)).toEqual({
+    restarted: true,
+  });
+  expect(calls).toEqual(["stop:bot-1"]);
+  expect(addressedAs).toEqual(["bot-1", "bot-1"]);
+  expect(await snapshots.load("bot-1")).toBeUndefined();
+  expect(rows.at(-1)?.eventType).toBe("computer.stopped");
+});
+test("shared browsers cannot be restarted as an individual Bot", async () => {
+  const { provider, fetchImpl, calls } = fakeComputer();
+  provider.isolation = "shared";
+  const gateway = createComputerGateway({ provider, fetchImpl });
+  await expect(gateway.restartComputer("bot-1", ACTOR)).rejects.toThrow(
+    "isolated Bot computer",
+  );
+  expect(calls).toEqual([]);
+});
+
+test("restart reports a failed relaunch without deleting profile or restoring old refs", async () => {
+  const { provider, fetchImpl, calls } = fakeComputer();
+  const snapshots = createInMemorySnapshotStore();
+  const gateway = createComputerGateway({
+    provider,
+    fetchImpl,
+    snapshots,
+    auditStore: fakeAudit().store,
+  });
+  await gateway.snapshot("bot-1");
+  provider.locate = async () => {
+    throw new Error("computer unavailable");
+  };
+  await expect(gateway.restartComputer("bot-1", ACTOR)).rejects.toThrow(
+    "computer unavailable",
+  );
+  expect(calls).toEqual(["stop:bot-1"]);
+  expect(await snapshots.load("bot-1")).toBeUndefined();
+});

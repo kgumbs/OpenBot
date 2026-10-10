@@ -41,7 +41,7 @@ afterEach(() => {
   clearActivity("general-assistant");
 });
 
-async function run(action: "stop" | "reset") {
+async function run(action: "stop" | "reset" | "restart") {
   const options = setComputerStateMutationOptions(queryClient);
   const variables = { action, botId: "general-assistant" } as const;
   await options.mutationFn?.(variables, mutationContext(queryClient));
@@ -82,4 +82,15 @@ test("one Bot's reset leaves another Bot's history alone", async () => {
   expect(activityFor("general-assistant")).toEqual([]);
   expect(activityFor("knowledge")).toHaveLength(1);
   clearActivity("knowledge");
+});
+
+test("restarting a browser uses restart and preserves activity", async () => {
+  let path = "";
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    path = String(input);
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+  await run("restart");
+  expect(path).toBe("/api/computers/general-assistant/computers/restart");
+  expect(activityFor("general-assistant")).toHaveLength(1);
 });

@@ -415,7 +415,11 @@ export function createComputerRoutes(
     }
   });
 
-  /** Stop the browser, keep the logins. */
+  /** Restart an isolated browser, keeping its logins and files. */
+  routes.post("/:botId/computers/restart", (context) =>
+    act(context, (botId, actor) => gateway.restartComputer(botId, actor)),
+  );
+
   routes.post("/:botId/computers/stop", (context) =>
     act(context, (botId, actor) => gateway.stopComputer(botId, actor)),
   );

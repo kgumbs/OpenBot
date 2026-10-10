@@ -51,3 +51,17 @@ test("explicit restart stops desktop before services and starts attachment", asy
   expect(result.code).toBe(0);
   expect(result.calls).toBe("stop-desktop\nsubscriptions --stop --keep-computers\ndocker desktop start --timeout 90\ndocker info\ndesktop-start\n");
 });
+
+test("standalone subscription startup refuses to detach the active native broker", async () => {
+ const root = await mkdtemp(join(tmpdir(),"openbot-start-guard-"));
+ try {
+  await mkdir(join(root,"scripts"));await mkdir(join(root,"bin"));await mkdir(join(root,"desktop/src-tauri/target/debug"),{recursive:true});
+  for(const path of ["scripts/start-subscriptions.sh","scripts/require-bash.sh"])
+   await writeFile(join(root,path),await readFile(resolve(import.meta.dir,"..",path)));
+  await writeFile(join(root,"desktop/src-tauri/target/debug/openbot-desktop"),"");await chmod(join(root,"desktop/src-tauri/target/debug/openbot-desktop"),0o755);
+  await writeFile(join(root,"bin/bun"),'#!/bin/bash\necho reuse\n');await chmod(join(root,"bin/bun"),0o755);
+  const child=Bun.spawn(["bash","scripts/start-subscriptions.sh"],{cwd:root,env:{...process.env,OPENBOT_DESKTOP_HOST_TOKEN:"",PATH:`${root}/bin:${process.env.PATH}`},stdout:"pipe",stderr:"pipe"});
+  const [code,err]=await Promise.all([child.exited,new Response(child.stderr).text()]);
+  expect(code).toBe(1);expect(err).toContain("start-openbot.command --restart");
+ } finally {await rm(root,{recursive:true,force:true});}
+});

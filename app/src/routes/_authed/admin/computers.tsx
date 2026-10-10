@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { client } from "@/lib/client";
 import {
   PageEmpty,
   PageRows,
@@ -52,6 +53,25 @@ function ComputersPage() {
   const queryClient = useQueryClient();
   const nameFor = useBotNames();
 
+  const health = useQuery({
+    queryKey: ["admin", "local-health"],
+    queryFn: async () =>
+      (
+        await client("/api/admin/local-health", {
+          fallback: "Local diagnostics are unavailable.",
+        })
+      ).json() as Promise<{
+        state: string;
+        checkedAt: string;
+        checks: {
+          id: string;
+          status: string;
+          message: string;
+          action?: string;
+        }[];
+      }>,
+    retry: false,
+  });
   const fleet = useQuery(computerFleetQueryOptions());
   const hostAccess = useQuery(hostAccessQueryOptions());
   const agents = useQuery(agentListQueryOptions());
@@ -83,7 +103,10 @@ function ComputersPage() {
           ? stopHostAccess.error.message
           : null;
 
-  const run = (botId: string, action: "stop" | "reset" | "update") => {
+  const run = (
+    botId: string,
+    action: "stop" | "reset" | "update" | "restart",
+  ) => {
     setBusy(botId);
     setConfirming(null);
     setConfirmingUpdate(null);
@@ -120,6 +143,111 @@ function ComputersPage() {
         </p>
       ) : null}
 
+      <PageSection
+        title="System health"
+        description="Check model services, browsers, desktop folder access and Intelligence before starting work."
+      >
+        <Button
+          variant="outline"
+          disabled={health.isFetching}
+          onClick={() => void health.refetch()}
+        >
+          {health.isFetching ? "Checking…" : "Refresh health"}
+        </Button>
+        {health.data ? (
+          <div role="status" className="mt-3 space-y-3 text-sm">
+            <p className="font-medium">
+              System: {health.data.state} · Checked{" "}
+              {new Date(health.data.checkedAt).toLocaleTimeString()}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {health.data.checks
+                .filter((check) =>
+                  [
+                    "api",
+                    "web",
+                    "desktop",
+                    "intelligence",
+                    "claude",
+                    "chatgpt",
+                    "local-model",
+                    "computer",
+                    "supervisor",
+                  ].includes(check.id),
+                )
+                .map((check) => (
+                  <div
+                    key={check.id}
+                    className="rounded-md border border-border bg-muted/30 px-3 py-2"
+                  >
+                    <strong>
+                      {check.id === "desktop"
+                        ? "Desktop folder access"
+                        : check.id === "computer"
+                          ? "Browser service"
+                          : check.id === "local-model"
+                            ? "Local model"
+                            : check.id === "claude"
+                              ? "Claude"
+                              : check.id === "chatgpt"
+                                ? "ChatGPT"
+                                : check.id === "intelligence"
+                                  ? "Intelligence"
+                                  : check.id === "supervisor"
+                                    ? "Bot computer manager"
+                                    : check.id.toUpperCase()}
+                    </strong>
+                    <span className="ml-2">
+                      {check.status === "pass"
+                        ? "Ready"
+                        : check.status.toUpperCase()}
+                    </span>
+                    <p className="text-muted-foreground">{check.message}</p>
+                    {check.status !== "pass" && check.action ? (
+                      <p>{check.action}</p>
+                    ) : null}
+                  </div>
+                ))}
+            </div>
+            {health.data.checks
+              .filter(
+                (check) => check.status === "warn" || check.status === "fail",
+              )
+              .map((check) => (
+                <p
+                  key={check.id}
+                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+                >
+                  <strong>{check.id}</strong>: {check.message} {check.action}
+                </p>
+              ))}
+            <details>
+              <summary className="cursor-pointer">
+                All diagnostic checks ({health.data.checks.length})
+              </summary>
+              <div className="mt-2 space-y-2">
+                {health.data.checks.map((check) => (
+                  <p key={check.id}>
+                    <strong>
+                      {check.status.toUpperCase()} · {check.id}
+                    </strong>
+                    : {check.message}
+                    {check.action && check.status !== "pass"
+                      ? ` ${check.action}`
+                      : ""}
+                  </p>
+                ))}
+              </div>
+            </details>
+          </div>
+        ) : (
+          <p>
+            {health.isFetching
+              ? "Checking system readiness…"
+              : "Local health diagnostics are unavailable. Run bash doctor-openbot.command on the host."}
+          </p>
+        )}
+      </PageSection>
       <HostFoldersSection
         connected={hostAccess.data?.connected ?? false}
         grants={hostAccess.data?.grants ?? []}
@@ -192,6 +320,17 @@ function ComputersPage() {
                         Update computer
                       </Button>
                     ) : null}
+                    <Button
+                      disabled={
+                        busy === computer.botId || isolation !== "per-bot"
+                      }
+                      onClick={() => void run(computer.botId, "restart")}
+                      size="sm"
+                      variant="outline"
+                      title="Interrupt this browser and restart it, retaining saved sign-ins and files."
+                    >
+                      Restart browser
+                    </Button>
                     <Button
                       disabled={busy === computer.botId || !computer.running}
                       onClick={() => void run(computer.botId, "stop")}
@@ -301,13 +440,14 @@ function ComputersPage() {
       </Dialog>
 
       <p className="mt-4 text-muted-foreground text-sm">
-        <strong>Stop</strong> closes the browser and keeps its logins: the next
-        thing the Bot does starts it again where it left off.{" "}
-        <strong>Reset</strong> deletes the profile, so the Bot is signed out of
-        everything and starts clean. <strong>Update computer</strong> appears
-        when a computer runs an older image than this deployment, and moves it
-        onto the new one with its files and sign-ins kept. All three are
-        recorded in{" "}
+        <strong>Restart browser</strong> interrupts current work and reopens the
+        browser with its saved sign-ins and files. <strong>Stop</strong> closes
+        the browser and keeps its logins: the next thing the Bot does starts it
+        again where it left off. <strong>Reset</strong> deletes the profile, so
+        the Bot is signed out of everything and starts clean.{" "}
+        <strong>Update computer</strong> appears when a computer runs an older
+        image than this deployment, and moves it onto the new one with its files
+        and sign-ins kept. All four are recorded in{" "}
         <Link className="underline" to="/admin/audit">
           Audit
         </Link>

@@ -87,3 +87,20 @@ describe("server authorization", () => {
     await expect(response.json()).resolves.toEqual({ status: "ok" });
   });
 });
+
+test("local diagnostics require authentication before reading host state", async () => {
+  const app = createApp(config, noSessionAuth, {
+    rolesForUser: async () => [],
+  });
+  expect(
+    (await app.request("http://openbot.local/api/admin/local-health")).status,
+  ).toBe(401);
+});
+test("local diagnostics reject members before reading host state", async () => {
+  const app = createApp(config, authenticatedAs("member"), {
+    rolesForUser: async () => ["user"],
+  });
+  expect(
+    (await app.request("http://openbot.local/api/admin/local-health")).status,
+  ).toBe(403);
+});

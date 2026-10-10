@@ -84,7 +84,7 @@ export async function doctor(options: { root: string; timeout?: number; profile?
   const checks: Check[] = [];
   const add = (id: string, status: Check["status"], message: string, action?: string) => checks.push({ id, status, message, ...(action ? { action } : {}) });
   const envText = await deps.read(resolve(root, ".env"));
-  let env: Record<string, string> = {};
+  let env: Record<string, string | undefined> = {};
   try { env = parseEnv(envText ?? ""); } catch { add("configuration", "fail", "The .env file cannot be parsed.", "Repair its syntax without sharing its values."); }
   const profile = options.profile ?? (env.CLAUDE_CODE_OAUTH_TOKEN?.trim() ? "subscriptions" : "standard");
   if (envText === undefined) add("configuration", "fail", ".env is missing.", "Follow the setup guide; retain any existing credentials securely.");

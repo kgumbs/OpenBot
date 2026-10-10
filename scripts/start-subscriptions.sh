@@ -5,6 +5,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export COMPOSE_FILE=docker-compose.yml:docker-compose.subscriptions.yml
+# A standalone API restart loses the native launcher's in-memory shared token.
+if [[ $# -eq 0 && -z "${OPENBOT_DESKTOP_HOST_TOKEN:-}" && -x desktop/src-tauri/target/debug/openbot-desktop ]]; then
+  desktop_state="$(bun scripts/startup-health.ts desktop-state)"
+  if [[ "$desktop_state" != "absent" ]]; then
+    echo "Native desktop is active. Use bash start-openbot.command --restart to preserve folder access." >&2
+    exit 1
+  fi
+fi
 export OPENBOT_LOCAL_SUBSCRIPTION=claude
 export PICKED_HARNESS_SOURCE=installed
 export PICKED_HARNESS_IMAGE=openbot-agent-claude-sdk:local

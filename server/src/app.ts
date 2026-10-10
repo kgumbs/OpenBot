@@ -778,6 +778,53 @@ export function createApp(
       ),
     );
   }
+  // Source-clone diagnostics are opt-in and administrator-only. No configuration or
+  // subprocess output crosses this boundary: Doctor returns sanitized checks only.
+  let healthInFlight: Promise<unknown> | undefined;
+  let cachedHealth: { value: unknown; expires: number } | undefined;
+  app.get("/api/admin/local-health", requireUser, async (context) => {
+    const denied = requireAdmin(context);
+    if (denied) return denied;
+    if (process.env.OPENBOT_LOCAL_SUBSCRIPTION !== "claude") {
+      return context.json(
+        { error: "Local diagnostics are not enabled for this deployment." },
+        404,
+      );
+    }
+    context.header("Cache-Control", "no-store");
+    if (cachedHealth && cachedHealth.expires > Date.now())
+      return context.json(cachedHealth.value as object);
+    healthInFlight ??= (async () => {
+      const { doctor } = await import("../../scripts/doctor");
+      const { resolve } = await import("node:path");
+      const result = await doctor({
+        root: resolve(import.meta.dir, "../.."),
+        profile: "subscriptions",
+        timeout: 1500,
+      });
+      const value = {
+        state: result.state,
+        checks: result.checks,
+        checkedAt: new Date().toISOString(),
+      };
+      cachedHealth = { value, expires: Date.now() + 5000 };
+      return value;
+    })().finally(() => {
+      healthInFlight = undefined;
+    });
+    try {
+      return context.json((await healthInFlight) as object);
+    } catch {
+      return context.json(
+        {
+          error:
+            "Local diagnostics could not complete. Run Doctor on the host.",
+        },
+        503,
+      );
+    }
+  });
+
   app.get("/api/admin/status", requireUser, (context) => {
     const denied = requireAdmin(context);
     return denied ?? context.json({ status: "ok" });

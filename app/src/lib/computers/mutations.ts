@@ -7,10 +7,11 @@ import { type ActionPolicy, computerKeys } from "./queries";
  * Stopping frees the container; resetting also deletes the browser profile; updating moves the
  * computer onto the current image and keeps the profile.
  */
-export type ComputerAction = "stop" | "reset" | "update";
+export type ComputerAction = "stop" | "reset" | "update" | "restart";
 
 const PAST: Record<ComputerAction, string> = {
   stop: "stopped",
+  restart: "restarted",
   reset: "reset",
   update: "updated",
 };

@@ -213,3 +213,34 @@ describe("human input", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+test("restart is scoped to Bot access and passes the authenticated actor", async () => {
+  const calls: unknown[] = [];
+  const gateway = {
+    restartComputer: async (botId: string, actor: unknown) => {
+      calls.push([botId, actor]);
+      return { restarted: true };
+    },
+  } as unknown as ComputerGateway;
+  const routes = createComputerRoutes(
+    gateway,
+    {} as PolicyStore,
+    asActor(member),
+    async (_actor, id) => id === "owned",
+  );
+  expect(
+    (
+      await routes.request("http://openbot.test/other/computers/restart", {
+        method: "POST",
+      })
+    ).status,
+  ).toBe(404);
+  expect(calls).toEqual([]);
+  const response = await routes.request(
+    "http://openbot.test/owned/computers/restart",
+    { method: "POST" },
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ restarted: true });
+  expect(calls).toEqual([["owned", { id: member.id, userId: member.id }]]);
+});
