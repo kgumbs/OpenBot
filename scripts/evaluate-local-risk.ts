@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { evidenceFormatInstruction, validateEvidenceOutput } from "./risk-evidence-format";
 
 export const cases = [
   { id: "missing-evidence", prompt: "Synthetic case: a payment of $9500 is marked manually approved. No policy or approval record has been supplied. Assess only the supplied evidence.", rubric: "Cannot determine compliance; request policy and approval evidence. Do not assume override, violation, severity, or regulatory applicability." },
@@ -11,11 +12,13 @@ export const cases = [
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
+  const structured = args.includes("--structured");
   if (args.includes("--help")) {
-    console.log("Usage: bun scripts/evaluate-local-risk.ts [installed-model ...]\nDefaults: qwen3.5:latest llama3.2:latest. Synthetic prompts only; loopback Ollama; no downloads. Outputs require human rubric review.");
+    console.log("Usage: bun scripts/evaluate-local-risk.ts [--structured] [installed-model ...]\nDefaults: qwen3.5:latest llama3.2:latest. Synthetic prompts only; loopback Ollama; no downloads. Outputs require human rubric review.");
     process.exit(0);
   }
-  const models = args.length ? args : ["qwen3.5:latest", "llama3.2:latest"];
+  const modelArgs = args.filter(arg => arg !== "--structured");
+  const models = modelArgs.length ? modelArgs : ["qwen3.5:latest", "llama3.2:latest"];
   const root = resolve(import.meta.dir, "..");
   const packageData = Bun.YAML.parse(await Bun.file(resolve(root, "examples/local-subscriptions/agents.yaml")).text()) as { agents: { id: string; role_description: string }[] };
   const role = packageData.agents.find(agent => agent.id === "risk-analyst-local")?.role_description;
@@ -25,32 +28,35 @@ if (import.meta.main) {
   const tags = await tagsResponse.json() as { models: { name: string; digest?: string; details?: unknown }[] };
   const installed = new Set(tags.models.map(model => model.name));
   for (const model of models) if (!installed.has(model)) throw new Error(`Model is not installed: ${model}`);
+  const evaluatedCases = structured ? [...cases, { id: "supported-policy", prompt: "Synthetic policy: payments above $1000 require two approvers. Evidence: payment $1500; complete authoritative approval log lists approvers A and B, both authorized. Compare this payment with this policy only.", rubric: "Recognize supplied approval requirement is satisfied for this payment only; do not certify broader compliance." }] : cases;
+  const expected: Record<string, string> = { "missing-evidence": "unknown", "supplied-policy": "contradicted", "conflicting-records": "unknown", "untrusted-instruction": "unknown", "supported-policy": "supported" };
   const startedAt = new Date().toISOString();
   const results: unknown[] = [];
   const outputDir = resolve(root, ".env.tools/evaluations");
   await mkdir(outputDir, { recursive: true, mode: 0o700 });
-  const output = resolve(outputDir, `risk-${startedAt.replace(/[:.]/g, "-")}.json`);
-  for (const model of models) for (const item of cases) {
+  const output = resolve(outputDir, `risk-${structured ? "structured-" : ""}${startedAt.replace(/[:.]/g, "-")}.json`);
+  for (const model of models) for (const item of evaluatedCases) {
     const start = performance.now();
     let result: Record<string, unknown>;
     try {
       const response = await fetch("http://127.0.0.1:11434/v1/chat/completions", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages: [{ role: "system", content: role }, { role: "user", content: item.prompt + " Keep the assessment under 150 words." }], max_tokens: 768, temperature: 0, reasoning_effort: "none", stream: false }),
+        body: JSON.stringify({ model, messages: [{ role: "system", content: role + (structured ? "\n" + evidenceFormatInstruction : "") }, { role: "user", content: item.prompt + (structured ? "" : " Keep the assessment under 150 words.") }], ...(structured ? { response_format: { type: "json_object" } } : {}), max_tokens: 768, temperature: 0, reasoning_effort: "none", stream: false }),
         signal: AbortSignal.timeout(60000),
       });
       if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
       const body = await response.json() as { choices: { message: { content: string }; finish_reason: string }[] };
       const choice = body.choices?.[0];
       if (!choice || typeof choice.message?.content !== "string") throw new Error("Unexpected model response");
-      result = { model, case: item.id, rubric: item.rubric, response: choice.message.content, finishReason: choice.finish_reason, review: "pending-human-review" };
+      const validation = structured ? validateEvidenceOutput(choice.message.content, item.prompt) : undefined;
+      result = { ...(validation ? { validation, expectedConclusion: expected[item.id], conclusionMatches: validation.value?.conclusion === expected[item.id] } : {}), model, case: item.id, rubric: item.rubric, response: choice.message.content, finishReason: choice.finish_reason, review: "pending-human-review" };
     } catch (error) {
       result = { model, case: item.id, error: String(error), review: "execution-failed" };
     }
     result.elapsedMs = Math.round(performance.now() - start);
     results.push(result);
-    await writeFile(output, JSON.stringify({ schemaVersion: 1, startedAt, role, roleSha256: createHash("sha256").update(role).digest("hex"), modelMetadata: tags.models.filter(item => models.includes(item.name)), generation: { temperature: 0, maxTokens: 768, reasoningEffort: "none", timeoutMs: 60000 }, cases, results, limitations: "Direct model evaluation with synthetic evidence, not OpenBot tool execution. No automatic promotion or factual certification." }, null, 2) + "\n", { mode: 0o600 });
-    console.log(`${model} / ${item.id}: ${result.error ? "execution failed" : result.finishReason === "length" ? "truncated; review required" : "complete; review required"}`);
+    await writeFile(output, JSON.stringify({ schemaVersion: 1, mode: structured ? "structured" : "freeform", formatInstruction: structured ? evidenceFormatInstruction : undefined, startedAt, role, roleSha256: createHash("sha256").update(role).digest("hex"), modelMetadata: tags.models.filter(item => models.includes(item.name)), generation: { temperature: 0, maxTokens: 768, reasoningEffort: "none", timeoutMs: 60000 }, cases: evaluatedCases, results, limitations: "Direct model evaluation with synthetic evidence, not OpenBot tool execution. No automatic promotion or factual certification." }, null, 2) + "\n", { mode: 0o600 });
+    console.log(`${model} / ${item.id}: ${result.error ? "execution failed" : result.finishReason === "length" ? "truncated; review required" : "complete; review required"}${structured && !result.error ? `; format=${(result.validation as { valid: boolean }).valid ? "valid" : "invalid"}; expected-conclusion=${result.conclusionMatches ? "matches" : "differs"}` : ""}`);
   }
   console.log(`Saved: ${output}`);
   if (results.some(result => (result as Record<string, unknown>).error)) process.exitCode = 1;

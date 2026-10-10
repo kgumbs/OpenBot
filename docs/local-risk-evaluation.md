@@ -62,3 +62,6 @@ in this comparison; evaluate their host memory needs before adding them.
 Next: test a constrained evidence-output format against this baseline, including
 cases that distinguish unknown, contradicted, and supported conclusions. Expand
 the dataset before choosing another model or changing the risk Bot's status.
+
+The [constrained-format experiment](structured-risk-evaluation.md) records the
+next comparison and its remaining grounding failures.
