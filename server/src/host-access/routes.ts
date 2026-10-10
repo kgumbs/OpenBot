@@ -1,3 +1,4 @@
+import { validSavedGrant } from "./grant-store";
 import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { recordAuditEvent, type AuditStore } from "../audit";
@@ -75,6 +76,17 @@ export function createHostAccessRoutes(options: {
     return context.json(
       next ?? { operations: [], leaseMs: HOST_ACCESS_DESKTOP_LEASE_MS },
     );
+  });
+
+  routes.post("/desktop/restore", requireDesktop, async (context) => {
+    const body = await context.req.json().catch(() => null);
+    if (
+      !Array.isArray(body?.grants) ||
+      body.grants.length > 100 ||
+      !body.grants.every(validSavedGrant)
+    )
+      return context.json({ error: "Send valid saved native approvals." }, 400);
+    return context.json({ accepted: broker.restoreGrants(body.grants) });
   });
 
   routes.post("/desktop/result", requireDesktop, async (context) => {

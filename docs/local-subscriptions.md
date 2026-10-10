@@ -217,7 +217,7 @@ The ordinary launcher reuses a healthy desktop only after Doctor verifies servic
 
 `--check` checks prerequisites only. ChatGPT sign-in is optional: without its saved auth store, startup runs Claude only. New startup waits for the broker and local services, retrying Doctor up to ten times with 1.5-second per-probe deadlines. An upstream Intelligence outage can produce degraded readiness while leaving the interface available; failed checks are reported explicitly. Probe count and container count determine the total wait.
 
-`--restart` sends SIGTERM only to desktop processes whose full executable path matches this clone, waits for exit, then invokes the subscription stop/start workflow with `--keep-computers`, keeping existing Bot computers running. It interrupts running work and preserves database/browser volumes. Native folder grants are in memory, so approve needed folders again after reattachment. Restart sequencing is covered with isolated launcher fixtures; the healthy reuse path has also been checked against the running deployment.
+`--restart` sends SIGTERM only to desktop processes whose full executable path matches this clone, waits for exit, then invokes the subscription stop/start workflow with `--keep-computers`, keeping existing Bot computers running. It interrupts running work and preserves database/browser volumes. Native folder approvals are now remembered for this clone/project and revalidated after reattachment. Explicit revocation remains permanent. Restart sequencing is covered with isolated launcher fixtures; the healthy reuse path has also been checked against the running deployment.
 
 Use [Doctor](doctor.md) for read-only diagnosis at any time.
 
@@ -237,3 +237,13 @@ These messages are native desktop code: use the rebuilt executable on the next d
 For imported root-owned browser volumes, use the [preview-first storage repair command](browser-storage-repair.md). Healthy running volumes do not need migration.
 
 Use the [local rebuild command](local-rebuild.md) after editing desktop, browser, supervisor, or subscription Bot source. It previews the build plan and uses persistent Rust tooling for native builds.
+
+### Remembered native folder approvals
+
+Folders approved through the native picker are now saved for this clone and Intelligence project. Restart restores those approvals only after the desktop validates each existing canonical folder against current protected-path rules and the API accepts the original Bot/user binding. It does not approve new folders. Writes and commands retain their existing confirmation/policy checks.
+
+The launcher binds saved approvals to the clone location and Intelligence API URL/key using a SHA-256 scope identifier. The credential itself is not written into approval files. Moving the clone or changing that project configuration requires fresh approvals.
+
+Local state lives under ignored `.env.tools/host-grants/<scope>/`: `native.json` contains private folder paths; `server.json` stores only opaque grant IDs, Bot/user bindings, display names, and revocations. Files are created with owner-only permissions on macOS/Linux. Keep these files private and do not copy them into another project. Removing a grant or pressing Stop in Host Access saves its revocation, preventing stale native state from restoring it after a restart. Temporary disconnection suspends access until a fresh authenticated handshake.
+
+Missing, protected, or invalid native approval data is not restored. Corrupt server revocation data blocks startup rather than risk restoring removed access; preserve it and diagnose the file before restarting. Approvals already lost before this feature was installed cannot be recovered; approve those folders once more through the native picker.

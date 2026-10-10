@@ -40,6 +40,8 @@ pub struct HostAccessConfig {
     pub engine: Address,
     pub image: String,
     pub forbidden_paths: Vec<PathBuf>,
+    pub grant_store: Option<PathBuf>,
+    pub grant_scope: Option<String>,
     pub poll_interval: Duration,
     pub operation_timeout: Duration,
     pub output_limit: usize,
@@ -62,6 +64,8 @@ impl HostAccessConfig {
             engine,
             image: image.into(),
             forbidden_paths,
+            grant_store: None,
+            grant_scope: None,
             poll_interval: DEFAULT_POLL_INTERVAL,
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
             output_limit: DEFAULT_OUTPUT_LIMIT,
@@ -96,7 +100,7 @@ struct State {
     active_by_bot: HashSet<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct LocalGrant {
     id: String,
     bot_id: String,
@@ -104,6 +108,74 @@ struct LocalGrant {
     bot_name: Option<String>,
     root: PathBuf,
     revoked: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+struct SavedGrants {
+    version: u32,
+    base_url: String,
+    scope: Option<String>,
+    grants: Vec<LocalGrant>,
+}
+
+fn load_grants(config: &HostAccessConfig) -> Vec<LocalGrant> {
+    let Some(path) = &config.grant_store else {
+        return Vec::new();
+    };
+    let Some(file) = fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<SavedGrants>(&bytes).ok())
+    else {
+        return Vec::new();
+    };
+    if file.version != 1 || file.base_url != config.base_url || file.scope != config.grant_scope {
+        return Vec::new();
+    }
+    file.grants
+        .into_iter()
+        .filter(|g| {
+            !g.revoked
+                && validate_grant_root(&g.root, &config.forbidden_paths)
+                    .is_ok_and(|root| root == g.root)
+        })
+        .take(100)
+        .collect()
+}
+
+fn save_grants(
+    config: &HostAccessConfig,
+    grants: &HashMap<String, LocalGrant>,
+) -> HostAccessResult<()> {
+    let Some(path) = &config.grant_store else {
+        return Ok(());
+    };
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|_| HostAccessError::Io("Could not save folder approvals.".into()))?;
+    }
+    let temporary = path.with_extension(fresh_id("tmp"));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&temporary)
+        .map_err(|_| HostAccessError::Io("Could not save folder approvals.".into()))?;
+    let saved = SavedGrants {
+        version: 1,
+        base_url: config.base_url.clone(),
+        scope: config.grant_scope.clone(),
+        grants: grants.values().filter(|g| !g.revoked).cloned().collect(),
+    };
+    serde_json::to_writer(&mut file, &saved)
+        .map_err(|_| HostAccessError::Io("Could not save folder approvals.".into()))?;
+    file.sync_all()
+        .map_err(|_| HostAccessError::Io("Could not save folder approvals.".into()))?;
+    fs::rename(temporary, path)
+        .map_err(|_| HostAccessError::Io("Could not save folder approvals.".into()))
 }
 
 #[derive(Clone, Debug)]
@@ -262,8 +334,8 @@ pub fn command_approval(policy: CommandPolicy, allowed_here: bool) -> CommandApp
 /// Folders where the person told this computer to stop asking about one Bot's commands.
 ///
 /// Kept in the desktop app's own configuration directory, never on the server: approval on this
-/// computer is collected here. Keyed by Bot and folder path because grants are session-only and
-/// their ids do not survive a restart. A file that cannot be read counts as empty, so a damaged
+/// computer is collected here. Keyed by Bot and folder path so command consent remains separate from
+/// the folder-grant lease. A file that cannot be read counts as empty, so a damaged
 /// file asks again rather than allowing.
 #[derive(Clone, Debug)]
 pub struct LocalCommandAllowList {
@@ -440,6 +512,10 @@ impl HostAccess {
         approval: Arc<dyn HostApprovalUi>,
     ) -> HostAccessResult<Self> {
         validate_config(&config)?;
+        let restored = load_grants(&config)
+            .into_iter()
+            .map(|g| (g.id.clone(), g))
+            .collect();
         let inner = Arc::new(Inner {
             config,
             approval,
@@ -448,7 +524,7 @@ impl HostAccess {
             state: Mutex::new(State {
                 stopped: false,
                 thread: None,
-                grants: HashMap::new(),
+                grants: restored,
                 running: HashMap::new(),
                 completed: HashSet::new(),
                 canceled_operations: HashSet::new(),
@@ -568,6 +644,42 @@ impl Inner {
     }
 
     fn next_operation(&self, client: &Client) -> HostAccessResult<Option<DesktopOperation>> {
+        if self.config.grant_store.is_some() {
+            let _effect = self.effect_lock.lock().expect("host effect lock poisoned");
+            let saved = load_grants(&self.config);
+            let offered: Vec<_> = saved.iter().map(|g| serde_json::json!({"id":g.id,"botId":g.bot_id,"actorId":g.actor_id,"displayName":display_name_for(&g.root),"revoked":false})).collect();
+            let response = client
+                .post(endpoint(
+                    &self.config.base_url,
+                    "/api/host-access/desktop/restore",
+                ))
+                .bearer_auth(&self.config.token)
+                .json(&serde_json::json!({"grants":offered}))
+                .send()
+                .map_err(|_| HostAccessError::Http("Folder restoration unavailable.".into()))?;
+            if !response.status().is_success() {
+                return Err(HostAccessError::Http("Folder restoration refused.".into()));
+            }
+            let body: serde_json::Value = response.json().map_err(|_| {
+                HostAccessError::Http("Folder restoration response invalid.".into())
+            })?;
+            let accepted = body
+                .get("accepted")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| {
+                    HostAccessError::Http("Folder restoration response invalid.".into())
+                })?;
+            let mut state = self.state.lock().expect("host state poisoned");
+            let mut changed = false;
+            for mut grant in saved {
+                grant.revoked = !accepted.iter().any(|id| id.as_str() == Some(&grant.id));
+                changed |= grant.revoked;
+                state.grants.insert(grant.id.clone(), grant);
+            }
+            if changed {
+                save_grants(&self.config, &state.grants)?;
+            }
+        }
         let url = endpoint(&self.config.base_url, "/api/host-access/desktop/next");
         let response = client
             .get(url)
@@ -792,11 +904,15 @@ impl Inner {
             root,
             revoked: false,
         };
-        self.state
-            .lock()
-            .expect("host state poisoned")
-            .grants
-            .insert(grant_id.clone(), grant);
+        {
+            let _effect = self.effect_lock.lock().expect("host effect lock poisoned");
+            let mut state = self.state.lock().expect("host state poisoned");
+            state.grants.insert(grant_id.clone(), grant);
+            if let Err(error) = save_grants(&self.config, &state.grants) {
+                state.grants.remove(&grant_id);
+                return Err(error);
+            }
+        }
         Ok(OperationSuccess {
             output: None,
             grant: Some(OperationGrant {
@@ -977,6 +1093,11 @@ impl Inner {
         let mut state = self.state.lock().expect("host state poisoned");
         for container in running {
             state.running.remove(&container.operation_id);
+        }
+        // Cancelling a timed-out operation suspends its lease, not the owner's saved approval.
+        // Explicit per-folder revocation is reconciled against the durable API ledger on the next poll.
+        if matches!(operation.kind, HostOperationKind::Stop) {
+            save_grants(&self.config, &state.grants)?;
         }
         Ok(OperationSuccess::empty())
     }
@@ -2005,6 +2126,59 @@ mod tests {
     }
 
     #[test]
+    fn remembered_approvals_survive_reload_but_revalidate_scope_and_paths() {
+        let root = temp_root("host-remembered");
+        let folder = root.join("BotFiles");
+        fs::create_dir_all(&folder).unwrap();
+        let mut config = HostAccessConfig::new(
+            "http://127.0.0.1:3001",
+            "token",
+            Address::new(crate::engine::Engine::Docker, None),
+            "image",
+            vec![],
+        );
+        config.grant_store = Some(root.join("grants.json"));
+        config.grant_scope = Some("project-one".into());
+        let grant = LocalGrant {
+            id: "id".into(),
+            bot_id: "bot".into(),
+            actor_id: "actor".into(),
+            bot_name: None,
+            root: folder.canonicalize().unwrap(),
+            revoked: false,
+        };
+        let mut grants = HashMap::new();
+        grants.insert(grant.id.clone(), grant);
+        save_grants(&config, &grants).unwrap();
+        let loaded = load_grants(&config);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].actor_id, "actor");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(config.grant_store.as_ref().unwrap())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        config.grant_scope = Some("project-two".into());
+        assert!(load_grants(&config).is_empty());
+        config.grant_scope = Some("project-one".into());
+        config.forbidden_paths.push(folder.clone());
+        assert!(load_grants(&config).is_empty());
+        config.forbidden_paths.clear();
+        fs::remove_dir(&folder).unwrap();
+        assert!(load_grants(&config).is_empty());
+        fs::write(config.grant_store.as_ref().unwrap(), "broken").unwrap();
+        assert!(load_grants(&config).is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn grant_denials_explain_scope_without_disclosing_private_paths() {
         let home = temp_root("host-access-explanation");
         let clone = home.join("private-clone-name");
@@ -2031,7 +2205,8 @@ mod tests {
         assert!(public_error_message(&ancestor_error).contains("administrator-configured"));
         let credential_parent = secrets.join("parent");
         fs::create_dir_all(&credential_parent).unwrap();
-        let nested_error = validate_grant_root_with_forbidden(&credential_parent, &defaults).unwrap_err();
+        let nested_error =
+            validate_grant_root_with_forbidden(&credential_parent, &defaults).unwrap_err();
         assert!(public_error_message(&nested_error).contains("protected credential"));
         #[cfg(unix)]
         {

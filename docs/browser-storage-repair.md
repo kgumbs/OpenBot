@@ -26,6 +26,6 @@ Apply recursively changes ownership of both named volumes to **1000:1000**. It p
 
 A timeout or failure triggers cleanup of that helper's unique container name. If Docker becomes unreachable, cleanup may also fail; inspect `openbot-volume-repair-*` containers once Docker recovers before restarting browser services. Ownership changes can be partial after failure; the operation can be rerun after resolving the cause. Very large volumes may exceed the two-minute repair deadline.
 
-Restart interrupts active work and requires native folder approvals again. Browser profiles, workspace data, and database volumes are retained.
+Restart interrupts active work; saved native folder approvals are restored after revalidation. Browser profiles, workspace data, and database volumes are retained.
 
 Regression tests use injected Docker responses. The opt-in Docker integration test creates and removes disposable volumes, verifies preserved file contents and access as UID 1000, and checks a symlink pointing outside the volume. Supply a local sandbox image digest via `OPENBOT_STORAGE_REPAIR_TEST_IMAGE` to run it; normal tests skip it.

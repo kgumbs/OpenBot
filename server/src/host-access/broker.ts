@@ -1,3 +1,4 @@
+import type { GrantStore } from "./grant-store";
 import { randomUUID } from "node:crypto";
 import {
   type ApprovalGate,
@@ -36,6 +37,7 @@ type OperationState = {
 };
 
 type HostAccessBrokerOptions = {
+  grantStore?: GrantStore;
   approvalGate?: ApprovalGate;
   /**
    * The member's command policy after the team cap (the stricter applies): ask every time, always
@@ -56,7 +58,20 @@ export function createHostAccessBroker(
 ) {
   const desktopLeaseMs = options.desktopLeaseMs ?? HOST_ACCESS_DESKTOP_LEASE_MS;
   const operationTtlMs = options.operationTtlMs ?? 120_000;
-  const grants = new Map<string, HostAccessGrant>();
+  const saved = new Map(
+    (options.grantStore?.load() ?? []).map((g) => [g.id, g]),
+  );
+  // A saved approval is unavailable until the native desktop revalidates and offers it.
+  const grants = new Map<string, HostAccessGrant>(
+    [...saved].map(([id, g]) => [id, { ...g, revoked: true }]),
+  );
+  function saveGrant(grant: HostAccessGrant) {
+    if (JSON.stringify(saved.get(grant.id)) === JSON.stringify(grant)) return;
+    const next = new Map(saved);
+    next.set(grant.id, { ...grant });
+    options.grantStore?.save([...next.values()]);
+    saved.set(grant.id, { ...grant });
+  }
   const operations = new Map<string, OperationState>();
   let desktopConnectedUntil: number | null = null;
   let desktopLeaseTimer: TimerHandle | null = null;
@@ -239,6 +254,27 @@ export function createHostAccessBroker(
   }
 
   return {
+    restoreGrants(offered: HostAccessGrant[]) {
+      expireDesktopLeaseIfNeeded();
+      desktopConnectedUntil = now() + desktopLeaseMs;
+      scheduleDesktopLeaseExpiry();
+      const accepted: string[] = [];
+      for (const grant of offered) {
+        const prior = saved.get(grant.id);
+        if (
+          prior &&
+          (prior.revoked ||
+            prior.botId !== grant.botId ||
+            prior.actorId !== grant.actorId)
+        )
+          continue;
+        const active = { ...grant, revoked: false };
+        saveGrant(active);
+        grants.set(active.id, active);
+        accepted.push(active.id);
+      }
+      return accepted;
+    },
     requestFolderGrant(input: {
       botId: string;
       botName: string;
@@ -382,6 +418,14 @@ export function createHostAccessBroker(
           displayName: result.grant.displayName,
           revoked: false,
         };
+        try {
+          saveGrant(grant);
+        } catch {
+          state.reject(
+            new HostAccessRefusedError("Folder approval could not be saved."),
+          );
+          return;
+        }
         grants.set(grant.id, grant);
         state.resolve(publicGrant(grant));
         return;
@@ -397,6 +441,7 @@ export function createHostAccessBroker(
           "That folder grant is not available to revoke.",
         );
       }
+      saveGrant({ ...grant, revoked: true });
       grant.revoked = true;
       const affected = [...operations.values()].filter(
         (state) =>
@@ -413,7 +458,10 @@ export function createHostAccessBroker(
     stop(actorId: string) {
       expireDesktopLeaseIfNeeded();
       for (const grant of grants.values()) {
-        if (grant.actorId === actorId) grant.revoked = true;
+        if (grant.actorId === actorId) {
+          saveGrant({ ...grant, revoked: true });
+          grant.revoked = true;
+        }
       }
       const affected = [...operations.values()].filter(
         (state) =>

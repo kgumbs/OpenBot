@@ -114,3 +114,58 @@ describe("host access routes", () => {
     });
   });
 });
+
+test("saved approval restoration requires the native token and rejects malformed grants", async () => {
+  const { app, broker } = appFor();
+  const body = JSON.stringify({
+    grants: [
+      {
+        id: "prior-native",
+        botId: "bot-a",
+        actorId: "user-a",
+        displayName: "BotFiles",
+        revoked: false,
+      },
+    ],
+  });
+  expect(
+    (
+      await app.request("/api/host-access/desktop/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      })
+    ).status,
+  ).toBe(401);
+  const response = await app.request("/api/host-access/desktop/restore", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer desktop-token",
+      "content-type": "application/json",
+    },
+    body,
+  });
+  expect(await response.json()).toEqual({ accepted: ["prior-native"] });
+  broker.revokeGrant("prior-native", "user-a");
+  const stale = await app.request("/api/host-access/desktop/restore", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer desktop-token",
+      "content-type": "application/json",
+    },
+    body,
+  });
+  expect(await stale.json()).toEqual({ accepted: [] });
+  expect(
+    (
+      await app.request("/api/host-access/desktop/restore", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer desktop-token",
+          "content-type": "application/json",
+        },
+        body: '{"grants":[{}]}',
+      })
+    ).status,
+  ).toBe(400);
+});

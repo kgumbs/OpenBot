@@ -48,7 +48,7 @@ bash start-openbot.command --restart
 bash doctor-openbot.command
 ```
 
-Desktop restart requires native folder approvals again. Bot services use the rebuilt image when recreated by startup.
+Desktop restart restores saved native folder approvals for this clone/project after revalidation. Bot services use the rebuilt image when recreated by startup.
 
 Existing supervisor-owned browser containers remain running across `--restart` and can continue using the old image. A successful image build alone does not update them. Schedule recreation of the affected Bot computers separately, preserving their existing named `/profiles` and `/workspace` volumes. Do not delete volumes to activate an image. The shared Compose computer is recreated through the normal restart workflow. Use the [storage repair workflow](browser-storage-repair.md) if imported root-owned volumes prevent the non-root image from writing.
 

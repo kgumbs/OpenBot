@@ -1,3 +1,5 @@
+import { fileGrantStore } from "./host-access/grant-store";
+import { resolve as resolveHostGrantPath } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AbstractAgent } from "@ag-ui/client";
@@ -1019,6 +1021,17 @@ const resolveRuntimeModelApiKey = () =>
   });
 
 const hostAccessBroker = createHostAccessBroker(Date.now, {
+  ...(process.env.OPENBOT_CLONE_ROOT &&
+  /^[a-f0-9]{64}$/.test(process.env.OPENBOT_HOST_GRANT_SCOPE ?? "")
+    ? {
+        grantStore: fileGrantStore(
+          resolveHostGrantPath(
+            process.env.OPENBOT_CLONE_ROOT,
+            `.env.tools/host-grants/${process.env.OPENBOT_HOST_GRANT_SCOPE}/server.json`,
+          ),
+        ),
+      }
+    : {}),
   approvalGate: approvalService.gate,
   commandPolicy: (actorId) => approvalService.hostCommandPolicy(actorId),
 });

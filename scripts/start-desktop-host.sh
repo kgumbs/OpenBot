@@ -10,6 +10,8 @@ fi
 # Memory only: this credential is never written to .env or sent to Bot containers.
 export OPENBOT_DESKTOP_HOST_TOKEN="$(openssl rand -hex 32)"
 export OPENBOT_CLONE_ROOT="$PWD"
+# Bind remembered approvals to this clone's Intelligence project, without storing its credential.
+export OPENBOT_HOST_GRANT_SCOPE="$(bun -e 'import {parseEnv} from "node:util"; import {createHash} from "node:crypto"; const e={...parseEnv(await Bun.file(".env").text()),...process.env}; console.log(createHash("sha256").update(JSON.stringify([process.cwd(),e.INTELLIGENCE_API_URL??"",e.INTELLIGENCE_API_KEY??""])).digest("hex"))')"
 export OPENBOT_CLONE_HOST_URL=http://127.0.0.1:3001
 export OPENBOT_CLONE_APP_URL=http://127.0.0.1:3010/admin/computers
 bash scripts/start-subscriptions.sh
