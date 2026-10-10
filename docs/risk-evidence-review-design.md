@@ -1,7 +1,6 @@
 # Reviewed evidence input design
 
-Status: design and synthetic fixtures only. There is no review UI, approval API,
-production input adapter, or change to the live Risk Analyst in this task.
+Status: original design and synthetic fixtures. A local, manually supplied evidence-review implementation is now documented in [reliability workflows](reliability-workflows.md). Automated extraction and external-source adapters remain unimplemented.
 
 ## Draft flow
 

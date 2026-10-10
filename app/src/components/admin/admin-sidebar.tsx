@@ -63,6 +63,11 @@ const GROUPS: {
         linkOptions: { to: "/admin/approvals" },
       },
       {
+        title: "Risk evidence review",
+        icon: IconShieldCheck,
+        linkOptions: { to: "/admin/risk-review" },
+      },
+      {
         title: "Computers",
         icon: IconDeviceDesktop,
         linkOptions: { to: "/admin/computers" },

@@ -75,6 +75,7 @@ describe("host access tools", () => {
       "host_read_file",
       "host_write_file",
       "host_run_command",
+      "host_search_files",
     ]);
 
     const answer = tools[1]!.execute({ grantId: "grant-1", path: "." });

@@ -1,3 +1,5 @@
+import { createRiskReviewRoutes } from "./risk-review/routes";
+import { resolve as resolveRiskRoot } from "node:path";
 import type { Hono as HonoApp, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -778,6 +780,15 @@ export function createApp(
       ),
     );
   }
+  app.route(
+    "/api/admin/risk-reviews",
+    createRiskReviewRoutes(
+      resolveRiskRoot(import.meta.dir, "../../.env.tools/risk-reviews"),
+      requireUser,
+      auditStore,
+    ),
+  );
+
   // Source-clone diagnostics are opt-in and administrator-only. No configuration or
   // subprocess output crosses this boundary: Doctor returns sanitized checks only.
   let healthInFlight: Promise<unknown> | undefined;

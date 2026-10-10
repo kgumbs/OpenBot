@@ -1,3 +1,4 @@
+import { RunProgress, runFailureMessage } from "./run-progress";
 import type { Message } from "@ag-ui/core";
 import {
   type Attachment,
@@ -865,8 +866,9 @@ export function ChannelChat({
       awaitingReply.current = false;
       // Both halves of one fact: the sentence the transcript shows, and the reason `deliver` throws
       // so the draft behind the turn is restored rather than counted as sent. See `turnFailure`.
-      turnFailure.current = message;
-      setRunError(message);
+      const usefulMessage = runFailureMessage(message);
+      turnFailure.current = usefulMessage;
+      setRunError(usefulMessage);
     };
     const subscription = agent.subscribe?.({
       // Both surfaces fall back to the same sentence, from the same place, so a person who uses
@@ -1011,6 +1013,15 @@ export function ChannelChat({
                * it — and they are independent, so neither is an `else` for the other.
                */
               <>
+                <RunProgress
+                  running={
+                    agent.isRunning || turnsInFlight > 0 || runsInFlight > 0
+                  }
+                  connecting={
+                    turnsInFlight > 0 && runsInFlight === 0 && !agent.isRunning
+                  }
+                  messages={agent.messages}
+                />
                 <HandoffResumeNotice
                   botId={runtimeAgentId}
                   agent={agent}
