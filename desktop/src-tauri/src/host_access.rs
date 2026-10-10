@@ -1410,6 +1410,7 @@ fn owner_ids() -> (u32, u32) {
 }
 
 struct ForbiddenPaths {
+    configured_subtrees: Vec<PathBuf>,
     exact_or_ancestor_only: Vec<PathBuf>,
     protected_subtrees: Vec<PathBuf>,
 }
@@ -1425,20 +1426,32 @@ fn validate_grant_root_with_forbidden(
     let root = canonical(path)?;
     if root.parent().is_none() {
         return Err(HostAccessError::Denied(
-            "The filesystem root cannot be granted.".into(),
+            "The filesystem root exposes the whole computer. Select a dedicated folder for Bot files instead.".into(),
         ));
+    }
+    for denied in &forbidden.configured_subtrees {
+        if path_contains(&root, denied) || path_contains(denied, &root) {
+            return Err(HostAccessError::Denied(
+                "This folder overlaps a protected OpenBot or administrator-configured location. Select a separate folder outside that location for Bot files.".into(),
+            ));
+        }
     }
     for denied in &forbidden.exact_or_ancestor_only {
         if &root == denied || path_contains(&root, denied) {
             return Err(HostAccessError::Denied(
-                "That folder cannot be granted to a Bot.".into(),
+                "Your home folder and its parent folders are too broad to share. Select a dedicated folder inside your home folder instead.".into(),
             ));
         }
     }
     for denied in &forbidden.protected_subtrees {
         if path_contains(&root, denied) || path_contains(denied, &root) {
             return Err(HostAccessError::Denied(
-                "That folder cannot be granted to a Bot.".into(),
+                if path_contains(&root, denied) && &root != denied {
+                    "This folder contains a protected credential, browser profile, or system location. Select a narrower folder outside the protected location."
+                } else {
+                    "This folder is inside a protected credential, browser profile, or system location. Select a separate folder for Bot files."
+                }
+                .into(),
             ));
         }
     }
@@ -1505,6 +1518,10 @@ fn forbidden_paths_with_home(configured: &[PathBuf], home: Option<&Path>) -> For
             .filter_map(|path| canonical(path).ok()),
     );
     ForbiddenPaths {
+        configured_subtrees: configured
+            .iter()
+            .filter_map(|path| canonical(path).ok())
+            .collect(),
         exact_or_ancestor_only,
         protected_subtrees,
     }
@@ -1985,6 +2002,48 @@ mod tests {
         ));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn grant_denials_explain_scope_without_disclosing_private_paths() {
+        let home = temp_root("host-access-explanation");
+        let clone = home.join("private-clone-name");
+        let secrets = home.join(".ssh");
+        let child = clone.join("child");
+        let safe = home.join("BotFiles");
+        for path in [&clone, &secrets, &child, &safe] {
+            fs::create_dir_all(path).unwrap();
+        }
+        let defaults = forbidden_paths_with_home(&[], Some(&home));
+        let home_error = validate_grant_root_with_forbidden(&home, &defaults).unwrap_err();
+        assert!(public_error_message(&home_error).contains("too broad"));
+        let secret_error = validate_grant_root_with_forbidden(&secrets, &defaults).unwrap_err();
+        assert!(public_error_message(&secret_error).contains("protected credential"));
+        let configured = forbidden_paths_with_home(std::slice::from_ref(&clone), Some(&home));
+        for path in [&clone, &child] {
+            let error = validate_grant_root_with_forbidden(path, &configured).unwrap_err();
+            let message = public_error_message(&error);
+            assert!(message.contains("administrator-configured"));
+            assert!(!message.contains("private-clone-name"));
+            assert!(!message.contains(home.to_str().unwrap()));
+        }
+        let ancestor_error = validate_grant_root_with_forbidden(&home, &configured).unwrap_err();
+        assert!(public_error_message(&ancestor_error).contains("administrator-configured"));
+        let credential_parent = secrets.join("parent");
+        fs::create_dir_all(&credential_parent).unwrap();
+        let nested_error = validate_grant_root_with_forbidden(&credential_parent, &defaults).unwrap_err();
+        assert!(public_error_message(&nested_error).contains("protected credential"));
+        #[cfg(unix)]
+        {
+            let link = home.join("credential-link");
+            std::os::unix::fs::symlink(&secrets, &link).unwrap();
+            let error = validate_grant_root_with_forbidden(&link, &defaults).unwrap_err();
+            assert!(public_error_message(&error).contains("protected credential"));
+            let error = validate_grant_root_with_forbidden(Path::new("/"), &defaults).unwrap_err();
+            assert!(public_error_message(&error).contains("whole computer"));
+        }
+        assert!(validate_grant_root_with_forbidden(&safe, &configured).is_ok());
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[test]

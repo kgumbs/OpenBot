@@ -220,3 +220,16 @@ The ordinary launcher reuses a healthy desktop only after Doctor verifies servic
 `--restart` sends SIGTERM only to desktop processes whose full executable path matches this clone, waits for exit, then invokes the subscription stop/start workflow with `--keep-computers`, keeping existing Bot computers running. It interrupts running work and preserves database/browser volumes. Native folder grants are in memory, so approve needed folders again after reattachment. Restart sequencing is covered with isolated launcher fixtures; the healthy reuse path has also been checked against the running deployment.
 
 Use [Doctor](doctor.md) for read-only diagnosis at any time.
+
+### Folder-selection explanations
+
+The desktop reports why a selected folder is blocked:
+
+- The filesystem root exposes the whole computer.
+- The home folder or a parent folder is too broad to share.
+- A folder overlaps a protected OpenBot or administrator-configured location, including the clone itself or a parent containing it.
+- A folder is within, or contains, protected credentials, browser profiles, or system locations.
+
+Select a dedicated folder such as `/Users/kgumbs/development/BotFiles` outside the protected clone and credential locations. The message does not disclose protected absolute paths. Symlinks are resolved before validation, so a shortcut does not change access restrictions. No folder is granted automatically.
+
+These messages are native desktop code: use the rebuilt executable on the next desktop restart. The existing process continues using its previous version until restarted.
