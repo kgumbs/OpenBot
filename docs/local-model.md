@@ -132,3 +132,23 @@ completed without another watchdog event. Repeated slow runs should be measured 
 those limits; increasing a watchdog alone does not fix stalled browser or inference work.
 
 Next: trace the incomplete local model final answer through the provider's AG-UI stream.
+
+## Completed live reply reconciliation
+
+Investigation of the apparent `is` answer found the durable conversation held the complete
+`The page title is "Example Domain".` sentence. Reloading recovered it. Synthetic direct-agent
+probes, both plain text and after a browser tool result, produced matching complete streamed text
+and final message snapshots. The loss was therefore observed in live client state rather than
+established as model generation loss.
+
+The channel now performs bounded durable-history reads after a successful turn and repairs fuller
+text for assistant IDs created by that turn. It retains live tool metadata, leaves older turns and
+user messages unchanged, never shortens text from a lagging store, and abandons repair when the
+agent changes, another history read supersedes it, or a run becomes active.
+
+Validation: two focused regression tests (five assertions) and app TypeScript checking passed.
+A subsequent live channel turn displayed the complete example.com title sentence without reloading.
+That turn reused available knowledge rather than showing a new browser activity row; the earlier
+live browser navigation test remains the evidence for navigation itself.
+
+Next: add an automated UI regression that compares the completed bubble with durable history.

@@ -53,6 +53,7 @@ import {
 } from "@/lib/voice/archive";
 import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
+import { reconcileCompletedReply } from "./completed-reply";
 
 /**
  * How long a stalled thread join is worth waiting for before it is ended.
@@ -722,6 +723,43 @@ export function ChannelChat({
       );
     } finally {
       setRunsInFlight((count) => count - 1);
+    }
+
+    // Streaming can leave a partial bubble even though the final answer was persisted.
+    // Reconcile only this completed turn, and never overwrite a newer active run.
+    if (!turnFailure.current) {
+      const beforeRun = new Set(assistantMessagesBeforeRun.current);
+      const version = ++historyReadVersion.current;
+      for (const delayMs of [0, 750, 1500]) {
+        if (delayMs)
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (
+          version !== historyReadVersion.current ||
+          target !== agentRef.current ||
+          target.isRunning
+        )
+          break;
+        const stored = await readThreadMessages(
+          channel.threadId,
+          runtimeAgentId,
+        );
+        if (
+          version !== historyReadVersion.current ||
+          target !== agentRef.current ||
+          target.isRunning
+        )
+          break;
+        if (stored.availability !== "ready") continue;
+        const messages = reconcileCompletedReply(
+          target.messages,
+          stored.messages,
+          beforeRun,
+        );
+        if (messages !== target.messages) {
+          target.setMessages(messages);
+          break;
+        }
+      }
     }
 
     /*
