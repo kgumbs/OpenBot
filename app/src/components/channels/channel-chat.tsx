@@ -334,6 +334,13 @@ export function ChannelChat({
   const [historyReadFailed, setHistoryReadFailed] = useState(false);
   // Mount reads and Bot refreshes share one ordering: only the newest read owns the notice.
   const historyReadVersion = useRef(0);
+  const replyRepairVersion = useRef(0);
+  useEffect(
+    () => () => {
+      replyRepairVersion.current += 1;
+    },
+    [],
+  );
   useEffect(() => {
     if (isReady) openReadyGate.current();
   }, [isReady]);
@@ -618,6 +625,7 @@ export function ChannelChat({
     skillInstructions: string[],
     attachments: Attachment[],
   ) => {
+    replyRepairVersion.current += 1;
     // Wait briefly for the runtime agent instance before adding the message.
     if (!isReadyRef.current) {
       await Promise.race([
@@ -727,39 +735,51 @@ export function ChannelChat({
 
     // Streaming can leave a partial bubble even though the final answer was persisted.
     // Reconcile only this completed turn, and never overwrite a newer active run.
-    if (!turnFailure.current) {
+    if (
+      !turnFailure.current &&
+      target.messages.some(
+        (message) =>
+          message.role === "assistant" &&
+          !assistantMessagesBeforeRun.current.has(message.id),
+      )
+    ) {
       const beforeRun = new Set(assistantMessagesBeforeRun.current);
-      const version = ++historyReadVersion.current;
-      for (const delayMs of [0, 750, 1500]) {
-        if (delayMs)
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        if (
-          version !== historyReadVersion.current ||
-          target !== agentRef.current ||
-          target.isRunning
-        )
-          break;
-        const stored = await readThreadMessages(
-          channel.threadId,
-          runtimeAgentId,
-        );
-        if (
-          version !== historyReadVersion.current ||
-          target !== agentRef.current ||
-          target.isRunning
-        )
-          break;
-        if (stored.availability !== "ready") continue;
-        const messages = reconcileCompletedReply(
-          target.messages,
-          stored.messages,
-          beforeRun,
-        );
-        if (messages !== target.messages) {
-          target.setMessages(messages);
-          break;
+      const version = historyReadVersion.current;
+      const repairVersion = ++replyRepairVersion.current;
+      void (async () => {
+        for (const delayMs of [0, 750, 1500]) {
+          if (delayMs)
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          if (
+            repairVersion !== replyRepairVersion.current ||
+            version !== historyReadVersion.current ||
+            target !== agentRef.current ||
+            target.isRunning
+          )
+            break;
+          const stored = await readThreadMessages(
+            channel.threadId,
+            runtimeAgentId,
+          );
+          if (
+            repairVersion !== replyRepairVersion.current ||
+            version !== historyReadVersion.current ||
+            target !== agentRef.current ||
+            target.isRunning
+          )
+            break;
+          if (stored.availability !== "ready") continue;
+          const messages = reconcileCompletedReply(
+            target.messages,
+            stored.messages,
+            beforeRun,
+          );
+          if (messages !== target.messages) {
+            target.setMessages(messages);
+            break;
+          }
         }
-      }
+      })();
     }
 
     /*

@@ -152,3 +152,19 @@ That turn reused available knowledge rather than showing a new browser activity 
 live browser navigation test remains the evidence for navigation itself.
 
 Next: add an automated UI regression that compares the completed bubble with durable history.
+
+## Automated rendered-chat regression
+
+`app/tests/channel-history-refresh.test.tsx` now renders the real ChannelChat/CopilotKit provider
+with synthetic HTTP boundaries. It first displays the partial `is` bubble, delays the durable final
+history response, then verifies the complete answer replaces that bubble in the same mounted chat.
+It also checks earlier messages remain visible, only one model run occurred, and the composer
+remains usable while final-history reconciliation is pending. The test fails with the repair removed.
+
+The broader suite exposed blocking retries in the initial repair. Those now run in the background;
+a new send or unmount cancels stale repairs, and intervening history refreshes supersede them.
+Existing activity-echo tests include the expected final-answer history read.
+
+Validation: 36 related UI/helper tests passed (174 assertions before the additional composer
+assertion); the strengthened focused UI test also passed. App TypeScript checking passed.
+Next: add a regression for cancellation when another turn starts before history repair completes.

@@ -521,7 +521,7 @@ test("a same-tab activity echo does not append a lagging durable partial beside 
   if (!selfActivity) throw new Error("Missing self-reported Bot activity");
   history = async () => stored([initial, partialEcho]);
   await announce(1, channel, selfActivity);
-  expect(historyReads).toHaveLength(1);
+  expect(historyReads).toHaveLength(2);
 
   expect(view.getByText(fullReply.content)).toBeTruthy();
   expect(view.queryByText(partialEcho.content)).toBeNull();
@@ -585,7 +585,7 @@ test("a same-timestamp different activity after a self echo still refreshes dura
   if (!selfActivity) throw new Error("Missing self-reported Bot activity");
 
   await announce(1, channel, selfActivity);
-  expect(historyReads).toHaveLength(1);
+  expect(historyReads).toHaveLength(2);
   history = async () => stored([initial, relayed]);
   await announce(1, channel, {
     ...selfActivity,
@@ -594,7 +594,7 @@ test("a same-timestamp different activity after a self echo still refreshes dura
   });
 
   await view.findByText(relayed.content);
-  expect(historyReads).toHaveLength(2);
+  expect(historyReads).toHaveLength(3);
   expect(currentAgent().messages.map((message) => message.id)).toContain(
     relayed.id,
   );
@@ -664,7 +664,7 @@ test.each([
     history = async () => stored([initial, relayed]);
     await announce(1, channel, { ...selfActivity, ...override });
     await view.findByText(relayed.content);
-    expect(historyReads).toHaveLength(2);
+    expect(historyReads).toHaveLength(3);
     expect(currentAgent().messages.map((message) => message.id)).toContain(
       relayed.id,
     );
@@ -1156,3 +1156,52 @@ test.each(["mount", "refresh"])(
     expect(currentAgent().messages).toEqual([initial, local, fresh]);
   },
 );
+
+test("a completed partial bubble becomes the durable final answer without remounting", async () => {
+  const finalRead = delayedResponse();
+  const view = mounting(async () =>
+    runRequests.length === 0 ? stored([initial]) : finalRead.promise,
+  );
+  await view.findByText(initial.content);
+  const composer = view.getByRole("textbox", { name: "Message" });
+  const complete = 'The page title is "Example Domain".';
+  runEvents = (input) => [
+    { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
+    {
+      type: "TEXT_MESSAGE_START",
+      messageId: "partial-reply",
+      role: "assistant",
+    },
+    { type: "TEXT_MESSAGE_CONTENT", messageId: "partial-reply", delta: "is" },
+    { type: "TEXT_MESSAGE_END", messageId: "partial-reply" },
+    { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
+  ];
+  const user = userEvent.setup({ document: view.container.ownerDocument });
+  await user.type(composer, "Report the page title");
+  await user.click(view.getByRole("button", { name: "Send message" }));
+  await view.findByText("is", { exact: true });
+  await user.type(composer, "Next question stays editable");
+  await waitFor(() =>
+    expect(
+      view
+        .getByRole("button", { name: "Send message" })
+        .getAttribute("disabled"),
+    ).toBeNull(),
+  );
+  await waitFor(() => expect(historyReads.length).toBeGreaterThan(1));
+  expect(view.queryByText(complete)).toBeNull();
+  await act(async () =>
+    finalRead.resolve(
+      stored([
+        initial,
+        ...(runRequests[0]?.input.messages ?? []),
+        { id: "partial-reply", role: "assistant", content: complete },
+      ]),
+    ),
+  );
+  await view.findByText(complete);
+  expect(view.queryByText("is", { exact: true })).toBeNull();
+  expect(view.getByRole("textbox", { name: "Message" })).toBe(composer);
+  expect(view.getByText(initial.content)).toBeTruthy();
+  expect(runRequests).toHaveLength(1);
+});
