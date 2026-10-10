@@ -1735,3 +1735,72 @@ describe("updating a computer's image", () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+describe("navigation after browser handback", () => {
+  test("refreshes the snapshot and retries an explicitly unstarted navigation once", async () => {
+    let attempts = 0;
+    const { gateway, requests } = await gatewayWith(PERMISSIVE, {
+      routes: {
+        "/navigate": () =>
+          ++attempts === 1
+            ? Response.json(
+                { error: "Snapshot required", snapshotRequired: true },
+                { status: 409 },
+              )
+            : Response.json({
+                url: "https://example.com/",
+                title: "Example",
+                elapsedMs: 1,
+              }),
+      },
+    });
+    requests.length = 0;
+    expect(
+      (await gateway.navigate("bot-1", ACTOR, "https://example.com")).title,
+    ).toBe("Example");
+    expect(requests.map((r) => new URL(r.url).pathname)).toEqual([
+      "/navigate",
+      "/snapshot",
+      "/navigate",
+    ]);
+  });
+
+  test("does not loop when the fresh snapshot cannot clear the refusal", async () => {
+    let attempts = 0;
+    const { gateway } = await gatewayWith(PERMISSIVE, {
+      routes: {
+        "/navigate": () => {
+          attempts++;
+          return Response.json(
+            { error: "Snapshot required", snapshotRequired: true },
+            { status: 409 },
+          );
+        },
+      },
+    });
+    await expect(
+      gateway.navigate("bot-1", ACTOR, "https://example.com"),
+    ).rejects.toThrow(StaleSnapshotError);
+    expect(attempts).toBe(2);
+  });
+
+  test("does not refresh or retry while a human has control or on ordinary stale refs", async () => {
+    for (const body of [
+      { error: "Human has control", humanHasControl: true },
+      { error: "Stale snapshot" },
+    ]) {
+      const { gateway, requests } = await gatewayWith(PERMISSIVE, {
+        routes: {
+          "/navigate": () => Response.json(body, { status: 409 }),
+        },
+      });
+      requests.length = 0;
+      await expect(
+        gateway.navigate("bot-1", ACTOR, "https://example.com"),
+      ).rejects.toThrow();
+      expect(requests.map((r) => new URL(r.url).pathname)).toEqual([
+        "/navigate",
+      ]);
+    }
+  });
+});

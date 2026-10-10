@@ -990,20 +990,34 @@ export function createComputerGateway(
      * The transport applies its target guard before it sends a request. This is
      * the minimum rule that applies even when the action policy permits the URL.
      */
-    navigate(
+    async navigate(
       botId: string,
       actor: ActionActor,
       url: string,
       toolCallId?: string,
     ) {
-      return govern(
-        "computer_navigate",
-        botId,
-        actor,
-        { targetUrl: url },
-        async () =>
-          transport.navigate(await locate(botId), botId, url, toolCallId),
-      ).then((result) => withUntrustedNotice(result, "web page", PAGE_FIELDS));
+      const attempt = () =>
+        govern(
+          "computer_navigate",
+          botId,
+          actor,
+          { targetUrl: url },
+          async () =>
+            transport.navigate(await locate(botId), botId, url, toolCallId),
+        );
+      let result;
+      try {
+        result = await attempt();
+      } catch (error) {
+        // Only this explicit refusal guarantees navigation never started. Refresh the
+        // post-handback view, then recheck policy/control through govern on one retry.
+        // Never replay clicks or typing using references from before human control.
+        if (!(error instanceof StaleSnapshotError) || !error.snapshotRequired)
+          throw error;
+        await snapshot(botId);
+        result = await attempt();
+      }
+      return withUntrustedNotice(result, "web page", PAGE_FIELDS);
     },
 
     click(

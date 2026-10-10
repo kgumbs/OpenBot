@@ -69,3 +69,23 @@ suite's Docker integration test stalled and was interrupted; no integration-suit
 
 Next: improve browser tool error handling so a required fresh snapshot is handled automatically and
 an empty title is not presented as a successful navigation.
+
+## Automatic navigation recovery after handback
+
+The server gateway now handles the computer's explicit `snapshotRequired` refusal for navigation:
+it takes a fresh snapshot, then retries navigation once through the normal policy and control
+checks. This applies only when the computer confirms navigation was refused before it began.
+Human-control refusals, ordinary stale references, and other navigation failures are not retried.
+Clicks and typing still require the Bot to reassess the fresh page and select current references.
+A repeated snapshot-required refusal is surfaced rather than looping.
+
+Validation: 83 gateway/headless-tool tests passed, including recovery, bounded retries and
+no retry during human control; server TypeScript checking passed.
+
+Next: improve how the Bot reports failed navigation and empty page titles in conversation.
+
+Activation: the subscription startup script restarted the API with this change. A live
+Knowledge (Local) take-control/handback cycle succeeded, but its subsequent chat turn hit the
+60-second silent-stream timeout before returning a result. End-to-end recovery therefore remains
+unverified in this run. Doctor reported the native folder broker disconnected; API and computer
+health endpoints responded. These runtime issues are separate from the passing regression tests.
