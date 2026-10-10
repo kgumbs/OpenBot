@@ -61,7 +61,7 @@ services:
     image: openbot-agent-langgraph-agui:local
     environment:
       BOT_PROVIDER: openai
-      BOT_MODEL: qwen3.5:latest
+      BOT_MODEL: ${LOCAL_BOT_MODEL:-qwen3.5:latest}
       OPENBOT_LOCAL_MODEL: "true"
       OPENAI_BASE_URL: http://host.docker.internal:11434/v1
       OPENAI_API_KEY: ollama

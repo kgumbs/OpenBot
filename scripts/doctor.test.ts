@@ -37,6 +37,26 @@ describe("Doctor readiness and privacy", () => {
     f.deps.http = async url => url.includes(":4207/") ? { status: 503 } : http(url, 100);
     expect(check(await doctor({ root }, f.deps), "local-model")?.status).toBe("fail");
   });
+  test("local model diagnostics distinguish missing runtime and missing model", async () => {
+    const f = fixture(); const read = f.deps.read; const http = f.deps.http;
+    f.deps.read = async path => path.endsWith("/.env") ? `${await read(path)}\nOPENBOT_LOCAL_MODEL=true\nLOCAL_BOT_MODEL=qwen3.5` : read(path);
+    let reply: any = { status: 200, body: { models: [{ name: "qwen3.5:latest" }] } };
+    f.deps.http = async url => url.includes(":11434/") ? reply : http(url, 100);
+    expect(check(await doctor({ root }, f.deps), "local-model.installed")?.status).toBe("pass");
+    reply = { status: 200, body: { models: [{ name: "other:latest" }, null, { name: 123 }] } };
+    expect(check(await doctor({ root }, f.deps), "local-model.installed")?.status).toBe("fail");
+    reply = { status: 503, body: { error: "secret-runtime-error" } };
+    const report = await doctor({ root }, f.deps);
+    expect(check(report, "local-model.runtime")?.status).toBe("fail");
+    expect(check(report, "local-model.installed")).toBeUndefined();
+    expect(JSON.stringify(report)).not.toContain("secret-runtime-error");
+  });
+  test("disabled local model does not contact Ollama", async () => {
+    const f = fixture(); const http = f.deps.http; const urls: string[] = [];
+    f.deps.http = async url => { urls.push(url); return http(url, 100); };
+    await doctor({ root }, f.deps);
+    expect(urls.some(url => url.includes(":11434/"))).toBe(false);
+  });
   test("missing configuration fails without leaking response bodies", async () => {
     const { deps } = fixture({ read: async () => undefined, http: async () => ({ status: 500, body: { error: "secret-error" } }) });
     const r = await doctor({ root }, deps);

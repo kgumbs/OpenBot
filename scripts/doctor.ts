@@ -127,6 +127,26 @@ export async function doctor(options: { root: string; timeout?: number; profile?
     ...(oneEach ? [endpoint("supervisor", supervisorPort, "/health")] : []),
     ...(profile === "subscriptions" ? [endpoint("claude", 4212, "/health"), ...(env.OPENBOT_LOCAL_MODEL === "true" ? [endpoint("local-model", 4207, "/health")] : []), ...(chatgpt ? [endpoint("chatgpt", 4206, "/health")] : [])] : [endpoint("langgraph", port("LANGGRAPH_PORT", 4201), "/health")]),
   ]);
+  if (profile === "subscriptions" && env.OPENBOT_LOCAL_MODEL === "true") {
+    const model = env.LOCAL_BOT_MODEL?.trim() || "qwen3.5:latest";
+    const probe = await deps.http("http://127.0.0.1:11434/api/tags", timeout);
+    const models = probe.body?.models;
+    const reachable = probe.status === 200 && Array.isArray(models);
+    add("local-model.runtime", reachable ? "pass" : "fail",
+      reachable ? "Ollama responds on the host." : "Ollama is unavailable or returns unexpected metadata.",
+      reachable ? undefined : "Start Ollama, then run Doctor again. This probe does not load a model.");
+    if (reachable) {
+      const normalize = (name: string) => name.includes(":") ? name : `${name}:latest`;
+      const installed = models.some((entry: unknown) => {
+        if (!entry || typeof entry !== "object") return false;
+        const row = entry as { name?: unknown; model?: unknown };
+        return [row.name, row.model].some(value => typeof value === "string" && normalize(value) === normalize(model));
+      });
+      add("local-model.installed", installed ? "pass" : "fail",
+        installed ? "The configured local model is installed." : "The configured local model is not installed.",
+        installed ? undefined : "Check LOCAL_BOT_MODEL in .env and install that model with Ollama. Doctor does not download models.");
+    }
+  }
   if (serverPort !== undefined) {
     const info = await deps.http(`http://127.0.0.1:${serverPort}/api/copilotkit/info`, timeout);
     const identified = info.status === 200 && info.body?.mode === "intelligence" && typeof info.body?.agents === "object";

@@ -13,11 +13,15 @@ In the clone's ignored `.env`, set:
 
 ```dotenv
 OPENBOT_LOCAL_MODEL=true
+LOCAL_BOT_MODEL=qwen3.5:latest
 ```
 
 Then run `bash start-openbot.command --restart`. Open **Bots → Local Qwen → Message
 Local Qwen**. The local service uses loopback port 4207. Doctor checks its health
-when enabled. To disable it, set `OPENBOT_LOCAL_MODEL=false` and restart.
+when enabled. Doctor separately checks the host Ollama API and whether the
+configured model is installed. These read-only probes do not load or download a
+model and do not establish inference quality or Docker-to-host connectivity.
+Changing `LOCAL_BOT_MODEL` takes effect after restart. To disable it, set `OPENBOT_LOCAL_MODEL=false` and restart.
 
 The first model load and prompts with many tools can take longer than subscription
 models. Local inference requests cap output at 2048 tokens, disable thinking mode,
@@ -53,3 +57,15 @@ and Local Qwen; local inference options apply only to the local service.
 No general, knowledge, or risk-assessment Bot has been switched to this model.
 The local Bot is a separate evaluation target. Managed Intelligence remains a
 service dependency; this change does not create a fully offline deployment.
+
+## Diagnostic checks
+
+- `local-model`: the authenticated agent service is running (the health route is public).
+- `local-model.runtime`: the host Ollama API responds with model-list metadata.
+- `local-model.installed`: the model selected by `LOCAL_BOT_MODEL` is installed.
+
+An unavailable runtime or missing model fails readiness. When the feature is
+not enabled, Doctor does not contact Ollama. An unqualified model name is matched
+to its `:latest` tag. Eighteen Doctor tests pass, including offline-runtime,
+missing-model, and disabled-profile cases; the live workstation passes all three
+local-model checks.
