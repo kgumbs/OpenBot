@@ -54,8 +54,9 @@ and Local Qwen; local inference options apply only to the local service.
 - Doctor reported ready, and Claude/ChatGPT both completed live response checks
   after the final restart.
 
-No general, knowledge, or risk-assessment Bot has been switched to this model.
-The local Bot is a separate evaluation target. Managed Intelligence remains a
+The existing Claude and ChatGPT specialists retain their providers. Additional
+local specialists are separate evaluation targets: General Assistant (Local),
+Knowledge (Local), and Risk Analyst (Local Evaluation). Managed Intelligence remains a
 service dependency; this change does not create a fully offline deployment.
 
 ## Diagnostic checks
@@ -69,3 +70,47 @@ not enabled, Doctor does not contact Ollama. An unqualified model name is matche
 to its `:latest` tag. Eighteen Doctor tests pass, including offline-runtime,
 missing-model, and disabled-profile cases; the live workstation passes all three
 local-model checks.
+
+## Local specialist Bots
+
+All three additional specialists share the existing local agent endpoint and model.
+Their roles and attached skills differ:
+
+| Bot | Role | Attached skills |
+| --- | --- | --- |
+| General Assistant (Local) | Everyday planning and work | Bot and skill authoring |
+| Knowledge (Local) | Source-grounded company answers | Find document, check claim, changes, ownership |
+| Risk Analyst (Local Evaluation) | Evaluation only; human verification required | None by default |
+
+They are available from the Bots roster and the corresponding package channel
+allowlists. Skills do not grant access to documents, accounts, or native folders;
+those require the usual separate approvals. With no source connected, Knowledge
+must acknowledge the missing evidence rather than invent company policy.
+
+Synthetic role checks cover a meeting plan, an unknown reimbursement limit, and
+an incompletely documented payment. The initial risk response assumed a manual
+override and overstated what missing evidence proves. Its role now explicitly
+forbids those assumptions and unsupported regulatory/severity claims. These are
+smoke checks, not a certification of compliance-review accuracy.
+
+The subscription Compose override now sets supervisor `pull_policy: never`,
+matching the local computer image reuse policy. Normal restarts use installed
+images; source rebuilds remain explicit through the rebuild command. This avoids
+a registry-dependent supervisor build on each startup. A missing image requires
+an explicit computer/supervisor rebuild before startup.
+
+### Specialist acceptance results
+
+The general role completed the three-step planning prompt. Knowledge acknowledged
+that a company reimbursement limit could not be determined without sources, both
+in a direct role test and in the registered Bot's OpenBot chat.
+
+Risk failed the evidence-discipline test twice. Even with explicit instructions,
+it introduced unsupported regulatory thresholds and treated unprovided records
+as proof of a control failure. Its display name and title identify it as an
+evaluation Bot, and its role requires human verification. Do not treat its outputs
+as compliance determinations. No access grants or decision automation were added.
+
+Next: build a repeatable synthetic evidence evaluation before promoting a local
+risk model or expanding its access. Test alternative installed models against the
+same cases; passing basic chat and browser use is insufficient for this role.

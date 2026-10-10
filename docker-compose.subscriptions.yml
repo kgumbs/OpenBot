@@ -14,6 +14,7 @@ services:
       - seccomp=./supervisor/chromium-seccomp.json
     shm_size: 1gb
   supervisor:
+    pull_policy: never
     environment:
       COMPUTER_SANDBOX: "on"
       COMPUTER_IMAGE: openbot-agent-computer:sandbox-local
