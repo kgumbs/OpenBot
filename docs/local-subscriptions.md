@@ -247,3 +247,14 @@ The launcher binds saved approvals to the clone location and Intelligence API UR
 Local state lives under ignored `.env.tools/host-grants/<scope>/`: `native.json` contains private folder paths; `server.json` stores only opaque grant IDs, Bot/user bindings, display names, and revocations. Files are created with owner-only permissions on macOS/Linux. Keep these files private and do not copy them into another project. Removing a grant or pressing Stop in Host Access saves its revocation, preventing stale native state from restoring it after a restart. Temporary disconnection suspends access until a fresh authenticated handshake.
 
 Missing, protected, or invalid native approval data is not restored. Corrupt server revocation data blocks startup rather than risk restoring removed access; preserve it and diagnose the file before restarting. Approvals already lost before this feature was installed cannot be recovered; approve those folders once more through the native picker.
+
+## Reconnecting the native broker after an API restart
+
+Use `bash start-openbot.command --restart` when native folder access is enabled. The desktop
+launcher shares a fresh ephemeral host token with the API and native broker, retaining database,
+browser profiles and saved project-scoped approvals. Starting `scripts/start-subscriptions.sh`
+from a separate shell restarts the API without the launcher's in-memory token and can disconnect
+the existing broker. A running desktop process alone does not prove attachment.
+
+On 2026-10-10 the supported restart restored the unexpired broker lease, and Doctor reported
+`ready`, including the desktop check. No folder grants were added during verification.

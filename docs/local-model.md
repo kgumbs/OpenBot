@@ -117,3 +117,18 @@ same cases; passing basic chat and browser use is insufficient for this role.
 
 See [repeatable local risk evaluation](local-risk-evaluation.md) for the runner,
 rubric, and Qwen/Llama baseline. Neither model passed promotion criteria.
+
+## Runtime recovery verification (2026-10-10)
+
+After restarting the stalled Knowledge computer, the Ollama OpenAI-compatible streaming endpoint
+returned its first chunk in 5.009 seconds and finished in 5.022 seconds for a synthetic READY prompt.
+The subsequent Knowledge chat navigation completed without a new silent-stream timeout and its
+browser activity confirmed `Example Domain`. Its final prose was only `is`, so complete model
+answer quality remains unresolved; successful navigation does not establish correct final wording.
+
+This deployment's `AGENT_STALL_TIMEOUT_MS=60000` is shorter than the local provider's 120-second
+request timeout. No timeout was increased during this verification because the recovered run
+completed without another watchdog event. Repeated slow runs should be measured before changing
+those limits; increasing a watchdog alone does not fix stalled browser or inference work.
+
+Next: trace the incomplete local model final answer through the provider's AG-UI stream.
