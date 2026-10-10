@@ -15,4 +15,16 @@ export OPENBOT_CLONE_APP_URL=http://127.0.0.1:3010/admin/computers
 bash scripts/start-subscriptions.sh
 "$desktop_binary" &
 desktop_pid=$!
+# Verify broker attachment and service health before leaving the launcher waiting.
+if bun scripts/startup-health.ts wait; then
+  echo "OpenBot is ready."
+else
+  health_status=$?
+  if [[ "$health_status" -eq 2 ]]; then
+    echo "OpenBot started with degraded readiness; review the diagnostics above."
+  else
+    echo "OpenBot started but readiness failed. Services remain available for diagnosis." >&2
+    exit "$health_status"
+  fi
+fi
 wait "$desktop_pid"

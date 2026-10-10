@@ -24,10 +24,11 @@ if [[ -s .env.chatgpt/chatgpt-auth.json ]]; then
   export MANAGED_AGENT_AG_UI_URL="$CHATGPT_BOT_URL"
 fi
 if [[ "${1:-}" == "--stop" ]]; then
-  exec bash scripts/stop.sh
+  shift
+  exec bash scripts/stop.sh "$@"
 fi
 if [[ $# -ne 0 ]]; then
-  echo "Usage: bash scripts/start-subscriptions.sh [--stop]" >&2
+  echo "Usage: bash scripts/start-subscriptions.sh [--stop [--keep-computers]]" >&2
   exit 1
 fi
 bun -e 'import {readFileSync} from "node:fs"; import {parseEnv} from "node:util";

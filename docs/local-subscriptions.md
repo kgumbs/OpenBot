@@ -202,3 +202,21 @@ ownership migration before a non-root browser can write them.
 
 For checkpoint validation and the next development steps, see
 [Local reliability baseline](local-reliability-baseline.md).
+
+### Startup readiness and explicit restart
+
+Run from this clone:
+
+```sh
+bash start-openbot.command
+bash start-openbot.command --check
+bash start-openbot.command --restart
+```
+
+The ordinary launcher reuses a healthy desktop only after Doctor verifies service readiness and matches this clone's executable to a running process. An attached desktop with failing services produces diagnostics and directs you to an explicit restart. A disconnected desktop is left in place until you quit it or request `--restart`, because replacing its memory-only broker credential would break its connection.
+
+`--check` checks prerequisites only. ChatGPT sign-in is optional: without its saved auth store, startup runs Claude only. New startup waits for the broker and local services, retrying Doctor up to ten times with 1.5-second per-probe deadlines. An upstream Intelligence outage can produce degraded readiness while leaving the interface available; failed checks are reported explicitly. Probe count and container count determine the total wait.
+
+`--restart` sends SIGTERM only to desktop processes whose full executable path matches this clone, waits for exit, then invokes the subscription stop/start workflow with `--keep-computers`, keeping existing Bot computers running. It interrupts running work and preserves database/browser volumes. Native folder grants are in memory, so approve needed folders again after reattachment. Restart sequencing is covered with isolated launcher fixtures; the healthy reuse path has also been checked against the running deployment.
+
+Use [Doctor](doctor.md) for read-only diagnosis at any time.
