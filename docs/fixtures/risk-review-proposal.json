@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "state": "proposed",
+  "synthetic": true,
+  "caseId": "review-example-001",
+  "revision": 1,
+  "sources": [
+    {
+      "id": "S1",
+      "path": "docs/fixtures/risk-review-evidence.txt",
+      "sha256": "336106e28433ac361f43da71e699e98a292bf48844bd9c0edee919db840a6ecc"
+    }
+  ],
+  "proposedFacts": [
+    {
+      "id": "P1",
+      "kind": "policy",
+      "values": {
+        "currency": "USD",
+        "thresholdMinorUnits": 100000,
+        "operator": "above",
+        "requiredApprovers": 2
+      },
+      "sourceRefs": [
+        {
+          "sourceId": "S1",
+          "line": 2,
+          "quote": "Policy P1: For USD payments above 100000 cents, at least two distinct authorized approvers are required."
+        }
+      ]
+    },
+    {
+      "id": "T1",
+      "kind": "payment",
+      "values": {
+        "currency": "USD",
+        "amountMinorUnits": 150000,
+        "policyId": "P1"
+      },
+      "sourceRefs": [
+        {
+          "sourceId": "S1",
+          "line": 3,
+          "quote": "Payment T1: USD 150000 cents. Policy P1 applies to this synthetic transaction."
+        }
+      ]
+    },
+    {
+      "id": "A1",
+      "kind": "approval",
+      "values": {
+        "paymentId": "T1",
+        "authoritative": null,
+        "complete": null,
+        "approvers": [
+          {
+            "id": "person-A",
+            "authorized": null
+          },
+          {
+            "id": "person-B",
+            "authorized": null
+          }
+        ]
+      },
+      "sourceRefs": [
+        {
+          "sourceId": "S1",
+          "line": 4,
+          "quote": "Record A1: This synthetic approval log is authoritative and complete for payment T1."
+        },
+        {
+          "sourceId": "S1",
+          "line": 5,
+          "quote": "Approver person-A: authorized; approved payment T1."
+        },
+        {
+          "sourceId": "S1",
+          "line": 6,
+          "quote": "Approver person-B: authorized; approved payment T1."
+        }
+      ]
+    }
+  ],
+  "review": {
+    "reviewerId": null,
+    "reviewedAt": null,
+    "acceptedRevisionHash": null,
+    "decisions": []
+  },
+  "notes": "Source claims are visible, but model extraction cannot approve authority, completeness, or authorization. An authenticated reviewer must review each required field. This proposal must not run as accepted evidence."
+}

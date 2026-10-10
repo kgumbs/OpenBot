@@ -1,0 +1,6 @@
+SYNTHETIC EVALUATION DATA — NOT A REAL COMPANY POLICY
+Policy P1: For USD payments above 100000 cents, at least two distinct authorized approvers are required.
+Payment T1: USD 150000 cents. Policy P1 applies to this synthetic transaction.
+Record A1: This synthetic approval log is authoritative and complete for payment T1.
+Approver person-A: authorized; approved payment T1.
+Approver person-B: authorized; approved payment T1.

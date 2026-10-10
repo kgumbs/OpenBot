@@ -73,3 +73,7 @@ role, model, evaluation label, and permissions remain unchanged.
 
 Next: expand the curated cases and design a review step for evidence extraction
 before integrating deterministic findings into a Risk Analyst draft workflow.
+
+See the [reviewed evidence design](risk-evidence-review-design.md) for the expanded
+17-case dataset and the proposed review/revision gate. Historical model results
+above still describe the original five cases.
