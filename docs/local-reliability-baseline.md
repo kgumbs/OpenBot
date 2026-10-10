@@ -122,4 +122,4 @@ The original verification and limitations above describe the pre-improvement sna
 - Local source rebuild plans and persistent Rust tooling for this workstation.
 - Browser image freshness checks to identify rebuilt images awaiting container recreation.
 
-Remaining work includes reviewing pending upstream changes, providing a managed way to recreate individual Bot computers while preserving volumes, and evaluating the optional local-model profile. The subscription and managed Intelligence configuration remains the working baseline.
+Individual Bot computers can now be updated while preserving their volumes, and native folder approvals persist across local restarts. Pending upstream changes have been validated on `codex/upstream-sync-review`; see [the review](upstream-sync-review.md) for evidence and application steps. Applying that update and evaluating the optional local-model profile remain. The subscription and managed Intelligence configuration remains the working baseline.
