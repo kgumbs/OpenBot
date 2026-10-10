@@ -1,6 +1,6 @@
 # Upstream compatibility review
 
-Reviewed October 10, 2026. The running checkout remains on `codex/local-reliability`.
+Reviewed and activated October 10, 2026. The running checkout is `codex/local-reliability`, with the reviewed upstream merge applied.
 
 ## Prepared candidate
 
@@ -45,3 +45,22 @@ The live database has not been upgraded, and running services were not restarted
 
 Rolling back source alone does not undo the database migration. Retain the
 pre-upgrade database backup until acceptance checks pass.
+
+## Activation result
+
+The reviewed branch was merged into the reliability branch. Before activation,
+PostgreSQL was backed up in custom format to the ignored, private local file
+`.env.tools/backups/pre-upstream-20261010-134452.dump`; its archive manifest was
+successfully read with `pg_restore --list` (a full restore was not performed).
+
+Desktop and both subscription Bot images rebuilt successfully. The standard
+restart applied the migration and retained both existing Bot computers and their
+volumes. Doctor reported **ready**, including managed Intelligence, PostgreSQL,
+web/API, supervisor, browser image/storage/sandbox configuration, and native broker.
+Claude and ChatGPT each completed an authenticated local endpoint test with an
+`OK` response and a `RUN_FINISHED` event. The existing ChatGPT channel remained
+accessible in the in-app browser with its conversation history visible.
+
+No active native folder grants were present after restart. Folder access requires
+an initial user selection per Bot. Full interactive acceptance of the new team
+account workflows remains outside this activation check.
