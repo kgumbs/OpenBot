@@ -27,3 +27,27 @@ changed. The manual view showed no visible CAPTCHA or sign-in prompt.
 Next: evaluate the supported headed browser mode on an isolated computer, keeping
 sandboxing enabled. Do not spoof the browser identity as a substitute for diagnosis.
 A successful headed-mode test is needed before changing the live Bot configuration.
+
+## Isolated headed-mode result
+
+The sandbox-local image was tested in a disposable container with
+`COMPUTER_BROWSER_MODE=headed`, `COMPUTER_SANDBOX=on`, UID 1000, all capabilities
+dropped, no-new-privileges, the existing Chromium seccomp profile, temporary
+profiles/workspace, and no published ports or user credentials. The virtual X
+display started successfully.
+
+A fresh computer initially refused both sites because no egress policy had been
+pushed. Retesting with an explicit allowlist limited to cnn.com and example.com
+succeeded:
+
+- example.com: title Example Domain.
+- www.cnn.com: title Breaking News, Latest News and Videos | CNN; normal page text.
+
+The browser process was headed and reported sandbox on. No browser identity
+spoofing or sandbox disabling was added. This confirms primary-page navigation,
+not all CNN media, trackers, scripts, or links; the test allowlist was deliberately
+narrow. The test container and temporary token file were removed afterward. No
+live Bot container, profile, or policy was modified.
+
+Next: apply headed mode to the intended live Bot computer using a scoped update
+that preserves its browser profile, then repeat navigation through OpenBot chat.
