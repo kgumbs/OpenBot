@@ -94,6 +94,7 @@ export type ComputerState = {
   port?: number;
   /** Where to reach it, however it is arranged. */
   url?: string;
+  updateAvailable?: boolean;
 };
 
 /**
@@ -186,7 +187,7 @@ function labelsFor(names: ComputerNames): Record<string, string> {
 }
 
 /** Every computer this supervisor owns, and only those. */
-export async function listOwned(): Promise<ComputerState[]> {
+export async function listOwned(image?: string): Promise<ComputerState[]> {
   try {
     const containers = (
       await docker.listContainers({
@@ -194,15 +195,25 @@ export async function listOwned(): Promise<ComputerState[]> {
         filters: { label: [`${OWNER_LABEL}=true`] },
       })
     ).filter((container) => ours(container.Labels));
-    return containers.map((container) => ({
-      botId: container.Labels?.[BOT_LABEL] ?? "unknown",
-      container: (container.Names?.[0] ?? "").replace(/^\//, ""),
-      status: container.State,
-      ...(container.Created
-        ? { startedAt: new Date(container.Created * 1000).toISOString() }
-        : {}),
-      ...(portOf(container.Ports) ? { port: portOf(container.Ports) } : {}),
-    }));
+    return Promise.all(
+      containers.map(async (container) => ({
+        botId: container.Labels?.[BOT_LABEL] ?? "unknown",
+        container: (container.Names?.[0] ?? "").replace(/^\//, ""),
+        status: container.State,
+        ...(image
+          ? {
+              updateAvailable: !(await runsCurrentImage(
+                container.ImageID,
+                image,
+              )),
+            }
+          : {}),
+        ...(container.Created
+          ? { startedAt: new Date(container.Created * 1000).toISOString() }
+          : {}),
+        ...(portOf(container.Ports) ? { port: portOf(container.Ports) } : {}),
+      })),
+    );
   } catch (error) {
     throw new DockerUnavailableError(String(error));
   }
@@ -452,7 +463,9 @@ export function hostConfig(names: ComputerNames, options: EnsureOptions) {
     // No path from inside to more privilege than it started with, whatever it manages to run.
     SecurityOpt: [
       "no-new-privileges:true",
-      ...(options.chromiumSandbox ? [`seccomp=${JSON.stringify(chromiumSeccomp)}`] : []),
+      ...(options.chromiumSandbox
+        ? [`seccomp=${JSON.stringify(chromiumSeccomp)}`]
+        : []),
     ],
     // Chromium needs none of these, and each is a documented container escape route.
     CapDrop: ["ALL"],
@@ -608,6 +621,34 @@ export async function ensure(
   throw new DockerUnavailableError(
     `The computer for ${names.botId} was removed while it was being started.`,
   );
+}
+
+/** Explicit image update: retain named volumes; leave an idle computer idle. */
+export async function update(names: ComputerNames, options: EnsureOptions) {
+  const existing = await inspectOwned(names);
+  if (!existing || (await runsCurrentImage(existing.image, options.image)))
+    return { updated: false, wasRunning: existing?.status === "running" };
+  const wasRunning = existing.status === "running";
+  const result = {
+    updated: true,
+    wasRunning,
+    from: existing.image,
+    to: options.image,
+  };
+  if (wasRunning) {
+    // ensure replaces a stale owned container and waits for health before returning.
+    await ensure(names, options);
+  } else {
+    try {
+      await docker
+        .getContainer(names.container)
+        .remove({ force: false, v: false });
+    } catch (error) {
+      if (statusOf(error) !== 404)
+        throw new DockerUnavailableError(String(error));
+    }
+  }
+  return result;
 }
 
 /** Stop this Bot's computer. Its storage is untouched, so its logins survive. */

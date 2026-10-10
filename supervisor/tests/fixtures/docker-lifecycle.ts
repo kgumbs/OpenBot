@@ -387,3 +387,82 @@ describe("a computer built from an older image", () => {
     expect(after.Id).toBe(before.Id);
   }, 180_000);
 });
+
+describe("explicit image updates", () => {
+  async function shell(command: string) {
+    const child = Bun.spawn(
+      [
+        "docker",
+        "--host",
+        `unix://${SOCKET}`,
+        "exec",
+        names.container,
+        "sh",
+        "-c",
+        command,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const [code, out] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(0);
+    return out;
+  }
+  test("replaces a running stale computer, retains content, and reports healthy", async () => {
+    await supervisor.ensure(names, { image: OTHER, environment: [] });
+    await shell(
+      "printf preserved-profile > /profiles/update-sentinel; printf preserved-workspace > /workspace/update-sentinel",
+    );
+    const before = await runtime.docker.getContainer(names.container).inspect();
+    expect(
+      (await supervisor.listOwned(IMAGE)).find((c) => c.botId === BOT)
+        ?.updateAvailable,
+    ).toBe(true);
+    const result = await supervisor.update(names, {
+      image: IMAGE,
+      environment: [],
+    });
+    const after = await runtime.docker.getContainer(names.container).inspect();
+    expect(result.updated).toBe(true);
+    expect(result.wasRunning).toBe(true);
+    expect(after.Id).not.toBe(before.Id);
+    expect(after.State.Health?.Status).toBe("healthy");
+    expect(
+      await shell("cat /profiles/update-sentinel /workspace/update-sentinel"),
+    ).toBe("preserved-profilepreserved-workspace");
+    expect(
+      (await supervisor.listOwned(IMAGE)).find((c) => c.botId === BOT)
+        ?.updateAvailable,
+    ).toBe(false);
+  }, 180000);
+  test("retires a stopped stale computer without waking it or deleting volumes", async () => {
+    await supervisor.ensure(names, { image: OTHER, environment: [] });
+    await supervisor.stop(names);
+    const result = await supervisor.update(names, {
+      image: IMAGE,
+      environment: [],
+    });
+    expect(result).toMatchObject({ updated: true, wasRunning: false });
+    expect((await supervisor.listOwned()).some((c) => c.botId === BOT)).toBe(
+      false,
+    );
+    for (const name of [names.profileVolume, names.workspaceVolume])
+      expect((await runtime.docker.getVolume(name).inspect()).Name).toBe(name);
+  }, 180000);
+  test("current or absent computer is not recreated", async () => {
+    expect(
+      await supervisor.update(names, { image: IMAGE, environment: [] }),
+    ).toMatchObject({ updated: false });
+    await supervisor.ensure(names, { image: IMAGE, environment: [] });
+    const before = await runtime.docker.getContainer(names.container).inspect();
+    expect(
+      await supervisor.update(names, { image: IMAGE, environment: [] }),
+    ).toMatchObject({ updated: false });
+    expect(
+      (await runtime.docker.getContainer(names.container).inspect()).Id,
+    ).toBe(before.Id);
+  }, 180000);
+});

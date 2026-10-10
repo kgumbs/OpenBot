@@ -13,7 +13,11 @@
  * honest about being one shared computer.
  */
 
-import type { ComputerLocation, ComputerProvider } from "./provider";
+import type {
+  ComputerLocation,
+  ComputerProvider,
+  ComputerUpdate,
+} from "./provider";
 import type { ComputerStatus } from "./schema";
 
 type SupervisorComputerLocation = {
@@ -24,6 +28,7 @@ type SupervisorComputerLocation = {
   /** Where to reach it, decided by the supervisor rather than assembled here. */
   url?: string;
   startedAt?: string;
+  updateAvailable?: boolean;
 };
 
 export type SupervisorOptions = {
@@ -124,6 +129,9 @@ export function createDockerSupervisorProvider(
           ? { url: hostForPort(computer.port) }
           : {}),
       ...(computer.startedAt ? { startedAt: computer.startedAt } : {}),
+      ...(typeof computer.updateAvailable === "boolean"
+        ? { updateAvailable: computer.updateAvailable }
+        : {}),
     }));
   }
 
@@ -242,6 +250,21 @@ export function createDockerSupervisorProvider(
         `/computers/${encodeURIComponent(botId)}/stop`,
       )) as { stopped?: boolean } | null;
       return { wasRunning: result?.stopped === true };
+    },
+
+    async update(botId: string): Promise<ComputerUpdate> {
+      const result = (await call(
+        `/computers/${encodeURIComponent(botId)}/update`,
+      )) as ComputerUpdate | null;
+      if (
+        typeof result?.updated !== "boolean" ||
+        typeof result?.wasRunning !== "boolean"
+      )
+        throw new SupervisorError(
+          "The supervisor returned an invalid computer update result.",
+        );
+      if (result.updated) sessions.delete(botId);
+      return result;
     },
 
     async reset(botId: string): Promise<{ cleared: boolean }> {

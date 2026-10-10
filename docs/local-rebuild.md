@@ -55,3 +55,5 @@ Existing supervisor-owned browser containers remain running across `--restart` a
 For web branding edits, the local Vite app serves source changes; browser/computer images are not needed just to change web text or styles. Desktop branding belongs to the desktop build. Server changes follow the normal service restart workflow.
 
 Doctor now includes `browser.CONTAINER_ID.image` checks. A digest mismatch degrades readiness so you can identify computers that still need recreation after a build. It does not automatically interrupt those computers. Missing image metadata also warns, rather than assuming that a container is current.
+
+Docker Bot computers now support the existing **Admin > Computers > Update computer** control. The list previews which computers differ from the configured image, and confirmation updates only the selected Bot while keeping its named volumes. Running replacements must become healthy before success is reported. See [per-Bot computer updates](update-bot-computer.md).

@@ -314,3 +314,52 @@ describe("telling one run of a computer from the next, across replicas", () => {
     expect(seen.some((path) => path.endsWith("/ensure"))).toBe(false);
   });
 });
+
+describe("Docker computer image updates", () => {
+  test("lists update availability for the existing Admin confirmation", async () => {
+    const client = clientWith(() =>
+      Response.json({
+        computers: [
+          { botId: "sales", status: "running", updateAvailable: true },
+        ],
+      }),
+    );
+    expect((await client.list())[0]?.updateAvailable).toBe(true);
+  });
+  test("updates only the selected Bot and accepts a health-checked supervisor result", async () => {
+    const calls: string[] = [];
+    const client = clientWith((path) => {
+      calls.push(path);
+      return Response.json({
+        updated: true,
+        wasRunning: true,
+        from: "old",
+        to: "new",
+      });
+    });
+    expect(await client.update!("sales")).toEqual({
+      updated: true,
+      wasRunning: true,
+      from: "old",
+      to: "new",
+    });
+    expect(calls).toEqual(["/computers/sales/update"]);
+  });
+  test("rejects malformed update responses", async () => {
+    const client = clientWith(() => Response.json({ updated: "yes" }));
+    await expect(client.update!("sales")).rejects.toThrow(
+      "invalid computer update",
+    );
+  });
+  test("propagates failed readiness without reporting update success", async () => {
+    const client = clientWith(() =>
+      Response.json(
+        { error: "Replacement did not become healthy." },
+        { status: 503 },
+      ),
+    );
+    await expect(client.update!("sales")).rejects.toThrow(
+      "did not become healthy",
+    );
+  });
+});

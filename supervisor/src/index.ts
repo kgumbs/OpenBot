@@ -11,6 +11,7 @@ import {
   reachable,
   reset,
   stop,
+  update,
 } from "./docker";
 import { registerEntry } from "./identity";
 import { namesFor } from "./names";
@@ -93,6 +94,37 @@ function resolve(raw: string) {
   return namesFor(raw);
 }
 
+function computerOptions(botId: string) {
+  return {
+    image,
+    chromiumSandbox: process.env.COMPUTER_SANDBOX === "on",
+    environment: environmentFor(botId),
+    ...(network ? { network } : {}),
+    ...(runtime ? { runtime } : {}),
+    ...(memoryBytes ? { memoryBytes } : {}),
+    ...(spireSocketVolume ? { spireSocketVolume } : {}),
+  };
+}
+
+app.post("/computers/:botId/update", async (context) => {
+  const parsed = resolve(context.req.param("botId"));
+  if (!parsed.ok) return context.json({ error: parsed.reason }, 400);
+  try {
+    return context.json(
+      await update(parsed.names, computerOptions(parsed.names.botId)),
+    );
+  } catch (error) {
+    if (error instanceof NameHeldError)
+      return context.json({ error: error.message }, 409);
+    if (
+      error instanceof DockerUnavailableError ||
+      error instanceof ComputerNotAnsweringError
+    )
+      return context.json({ error: error.message }, 503);
+    throw error;
+  }
+});
+
 app.post("/computers/:botId/ensure", async (context) => {
   const parsed = resolve(context.req.param("botId"));
   if (!parsed.ok) return context.json({ error: parsed.reason }, 400);
@@ -102,15 +134,10 @@ app.post("/computers/:botId/ensure", async (context) => {
     // request.
     const identity = await registerEntry(parsed.names);
 
-    const state = await ensure(parsed.names, {
-      image,
-      chromiumSandbox: process.env.COMPUTER_SANDBOX === "on",
-      environment: environmentFor(parsed.names.botId),
-      ...(network ? { network } : {}),
-      ...(runtime ? { runtime } : {}),
-      ...(memoryBytes ? { memoryBytes } : {}),
-      ...(spireSocketVolume ? { spireSocketVolume } : {}),
-    });
+    const state = await ensure(
+      parsed.names,
+      computerOptions(parsed.names.botId),
+    );
     return context.json({
       ...state,
       ...(identity.registered
@@ -165,7 +192,7 @@ app.post("/computers/:botId/reset", async (context) => {
 
 app.get("/computers", async (context) => {
   try {
-    return context.json({ computers: await listOwned() });
+    return context.json({ computers: await listOwned(image) });
   } catch (error) {
     if (error instanceof DockerUnavailableError) {
       return context.json({ error: error.message }, 503);

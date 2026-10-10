@@ -17,7 +17,7 @@ export type ComputerLocation = {
   url?: string;
   startedAt?: string;
   egress?: string | null;
-  /** Whether this computer runs an older image than a new one would get. Only a sandbox can tell. */
+  /** Whether this computer runs an older image than a new one would get. Reported by providers that can compare their configured image. */
   updateAvailable?: boolean;
 };
 
