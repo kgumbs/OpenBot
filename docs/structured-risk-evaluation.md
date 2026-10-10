@@ -64,3 +64,6 @@ label, model routing, and access grants remain unchanged.
 Next: test a fact-ID format with deterministic policy comparisons. Keep generated
 commentary separate from verified findings, and expand the synthetic cases before
 considering deployment.
+
+The next [fact-ID experiment](fact-risk-evaluation.md) separates deterministic
+findings from model commentary and records its input-trust limitations.
