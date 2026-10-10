@@ -183,3 +183,14 @@ implementation change was needed. All 37 related tests passed (182 assertions), 
 checking passed.
 
 Next: cover cancellation when the user leaves the channel before a pending repair resolves.
+
+## Leaving-channel cancellation regression
+
+A rendered-chat test now completes a partial reply, holds its durable-history repair pending,
+unmounts the channel, and only then resolves the complete stored reply. The former agent's
+messages remain unchanged, the departed UI stays empty, and no extra model run or immediate
+history read is started. The regression fails when unmount cleanup is removed; no implementation
+change was required.
+
+Validation: 38 related UI/helper tests passed (188 assertions), and app TypeScript checking passed.
+Next: run the full app test suite to check for broader regressions across these chat changes.

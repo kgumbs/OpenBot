@@ -1273,3 +1273,58 @@ test("a newer completed turn cancels the older pending reply repair", async () =
   expect(view.getByRole("textbox", { name: "Message" })).toBe(composer);
   expect(runRequests).toHaveLength(2);
 });
+
+test("leaving the channel cancels a completed reply's pending repair", async () => {
+  const pending = delayedResponse();
+  const view = mounting(async () =>
+    runRequests.length === 0 ? stored([initial]) : pending.promise,
+  );
+  await view.findByText(initial.content);
+  runEvents = (input) => [
+    { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
+    {
+      type: "TEXT_MESSAGE_START",
+      messageId: "departed-reply",
+      role: "assistant",
+    },
+    {
+      type: "TEXT_MESSAGE_CONTENT",
+      messageId: "departed-reply",
+      delta: "Departed partial",
+    },
+    { type: "TEXT_MESSAGE_END", messageId: "departed-reply" },
+    { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
+  ];
+  const user = userEvent.setup({ document: view.container.ownerDocument });
+  await user.type(
+    view.getByRole("textbox", { name: "Message" }),
+    "Question before leaving",
+  );
+  await user.click(view.getByRole("button", { name: "Send message" }));
+  await view.findByText("Departed partial");
+  await waitFor(() => expect(historyReads).toHaveLength(2));
+  const formerAgent = currentAgent();
+  const beforeLeaving = structuredClone(formerAgent.messages);
+  view.unmount();
+  await act(async () => {
+    pending.resolve(
+      stored([
+        ...(runRequests[0]?.input.messages ?? []),
+        {
+          id: "departed-reply",
+          role: "assistant",
+          content: "Departed complete answer must not apply",
+        },
+      ]),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(formerAgent.messages).toEqual(beforeLeaving);
+  expect(
+    formerAgent.messages.find((message) => message.id === "departed-reply")
+      ?.content,
+  ).toBe("Departed partial");
+  expect(view.container.textContent).toBe("");
+  expect(historyReads).toHaveLength(2);
+  expect(runRequests).toHaveLength(1);
+});
