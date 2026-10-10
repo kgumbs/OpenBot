@@ -55,3 +55,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  agent-local:
+    profiles: [local-model]
+    image: openbot-agent-langgraph-agui:local
+    environment:
+      BOT_PROVIDER: openai
+      BOT_MODEL: qwen3.5:latest
+      OPENBOT_LOCAL_MODEL: "true"
+      OPENAI_BASE_URL: http://host.docker.internal:11434/v1
+      OPENAI_API_KEY: ollama
+      MANAGED_AGENT_TOKEN: ${MANAGED_AGENT_TOKEN:?Start the local stack once to generate this token}
+      AGENT_TOOL_TOKEN: ${AGENT_TOOL_TOKEN:?Start the local stack once to generate the callback token}
+      OPENBOT_TOOL_URL: http://host.docker.internal:${SERVER_PORT:-3001}/api/agent-tools/call
+    ports:
+      - "127.0.0.1:4207:4206"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4206/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

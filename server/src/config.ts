@@ -143,6 +143,7 @@ export type ManagedAgentConfig = {
    * it chose, holding this token. It gets the same header for the same reason.
    */
   alsoRun?: URL;
+  localRun?: URL;
 };
 
 /**
@@ -616,7 +617,10 @@ function managedAgentConfig(
   const alsoRun = optional(environment, "PICKED_HARNESS_IMAGE")
     ? optionalHttpUrl(environment, "PICKED_HARNESS_URL")
     : undefined;
+  const localRun = environment.OPENBOT_LOCAL_MODEL === "true"
+    ? optionalHttpUrl(environment, "LOCAL_BOT_URL") : undefined;
   const token = optional(environment, "MANAGED_AGENT_TOKEN");
+  if (localRun && !token) throw new Error("MANAGED_AGENT_TOKEN required for LOCAL_BOT_URL");
   if (endpoint && !token) {
     throw new Error(
       "MANAGED_AGENT_TOKEN must be set when MANAGED_AGENT_AG_UI_URL is set",
@@ -627,7 +631,7 @@ function managedAgentConfig(
       "MANAGED_AGENT_TOKEN must be set when an installed PICKED_HARNESS_URL is set",
     );
   }
-  if ((!endpoint && !alsoRun) || !token) {
+  if ((!endpoint && !alsoRun && !localRun) || !token) {
     return undefined;
   }
   /*
@@ -643,6 +647,7 @@ function managedAgentConfig(
     ...(endpoint ? { endpoint } : {}),
     token,
     ...(alsoRun ? { alsoRun } : {}),
+    ...(localRun ? { localRun } : {}),
   };
 }
 

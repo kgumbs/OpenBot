@@ -36,6 +36,7 @@ const loadAgents = createRuntimeAgentLoader(database, undefined, {
   endpoint: managedEndpoint,
   token: managedAgentToken,
   alsoRun: mastraManagedEndpoint,
+  localRun: new URL("http://127.0.0.1:4207"),
 });
 
 const testPrefix = `runtime-agents-${randomUUID()}`;
@@ -130,6 +131,19 @@ describe("runtime agent loading", () => {
         roleDescription:
           "Review receipts, categorize expenses, and prepare reimbursement reports.",
       }),
+    });
+  });
+
+  test("authenticates the explicitly configured local model endpoint", async () => {
+    const owner = await createUser();
+    const profile = await createCoworker(owner);
+    await setAgentRun(profile.id, {
+      type: "remote_ag_ui",
+      configuration: { endpoint: "http://127.0.0.1:4207/" },
+    });
+    const loaded = await loadAgents(owner);
+    expect(loaded.find(agent => agent.id === profile.id)?.headers).toEqual({
+      "x-openbot-agent-token": managedAgentToken,
     });
   });
 

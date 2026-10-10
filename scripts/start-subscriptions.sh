@@ -14,9 +14,15 @@ export PICKED_HARNESS_KIND=remote-ag-ui
 export MANAGED_AGENT_AG_UI_URL=http://127.0.0.1:4212
 export CLAUDE_BOT_URL=http://127.0.0.1:4212
 export TENANT_PACKAGE_DIR=../examples/local-subscriptions
-export AGENT_ENDPOINT_ALLOWED_HOSTS="$(bun -e 'import {readFileSync} from "node:fs"; import {parseEnv} from "node:util"; const e=parseEnv(readFileSync(".env","utf8")); console.log([process.env.AGENT_ENDPOINT_ALLOWED_HOSTS ?? e.AGENT_ENDPOINT_ALLOWED_HOSTS ?? "", "127.0.0.1:4212", "127.0.0.1:4206"].filter(Boolean).join(","))')"
+export OPENBOT_LOCAL_MODEL="$(bun -e 'import {readFileSync} from "node:fs"; import {parseEnv} from "node:util"; console.log(process.env.OPENBOT_LOCAL_MODEL ?? parseEnv(readFileSync(".env","utf8")).OPENBOT_LOCAL_MODEL ?? "false")')"
+export LOCAL_BOT_URL=""
+if [[ "$OPENBOT_LOCAL_MODEL" == "true" ]]; then
+  export LOCAL_BOT_URL=http://127.0.0.1:4207
+  export COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}local-model"
+fi
+export AGENT_ENDPOINT_ALLOWED_HOSTS="$(bun -e 'import {readFileSync} from "node:fs"; import {parseEnv} from "node:util"; const e=parseEnv(readFileSync(".env","utf8")); console.log([process.env.AGENT_ENDPOINT_ALLOWED_HOSTS ?? e.AGENT_ENDPOINT_ALLOWED_HOSTS ?? "", "127.0.0.1:4212", "127.0.0.1:4206", "127.0.0.1:4207"].filter(Boolean).join(","))')"
 if [[ -s .env.chatgpt/chatgpt-auth.json ]]; then
-  export COMPOSE_PROFILES=chatgpt
+  export COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}chatgpt"
   export OPENBOT_LOCAL_CHATGPT=true
   export CHATGPT_BOT_URL=http://127.0.0.1:4206
   # The server authenticates its two owned endpoints: the selected default

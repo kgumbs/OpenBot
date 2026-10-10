@@ -117,7 +117,7 @@ export async function doctor(options: { root: string; timeout?: number; profile?
   const endpoint = async (id: string, endpointPort: number | undefined, path: string, json = true) => {
     if (endpointPort === undefined) return { status: 0 };
     const probe = await deps.http(`http://127.0.0.1:${endpointPort}${path}`, timeout);
-    const valid = probe.status === 200 && (!json || (["claude", "chatgpt", "langgraph"].includes(id) ? probe.body?.ok === true && probe.body?.harness === (id === "claude" ? "claude-agent-sdk" : "langgraph") : probe.body?.status === "ok"));
+    const valid = probe.status === 200 && (!json || (["claude", "chatgpt", "langgraph", "local-model"].includes(id) ? probe.body?.ok === true && probe.body?.harness === (id === "claude" ? "claude-agent-sdk" : "langgraph") : probe.body?.status === "ok"));
     add(id, valid ? "pass" : "fail", valid ? `${id} endpoint responds as expected.` : `${id} endpoint is unavailable or is not the expected service.`, valid ? undefined : "Check the corresponding service and configured port; Doctor does not restart anything.");
     return probe;
   };
@@ -125,7 +125,7 @@ export async function doctor(options: { root: string; timeout?: number; profile?
     endpoint("web", appPort, "/", false),
     endpoint("computer", computerPort, "/health"),
     ...(oneEach ? [endpoint("supervisor", supervisorPort, "/health")] : []),
-    ...(profile === "subscriptions" ? [endpoint("claude", 4212, "/health"), ...(chatgpt ? [endpoint("chatgpt", 4206, "/health")] : [])] : [endpoint("langgraph", port("LANGGRAPH_PORT", 4201), "/health")]),
+    ...(profile === "subscriptions" ? [endpoint("claude", 4212, "/health"), ...(env.OPENBOT_LOCAL_MODEL === "true" ? [endpoint("local-model", 4207, "/health")] : []), ...(chatgpt ? [endpoint("chatgpt", 4206, "/health")] : [])] : [endpoint("langgraph", port("LANGGRAPH_PORT", 4201), "/health")]),
   ]);
   if (serverPort !== undefined) {
     const info = await deps.http(`http://127.0.0.1:${serverPort}/api/copilotkit/info`, timeout);

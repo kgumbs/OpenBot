@@ -66,7 +66,7 @@ export function createRuntimeAgentLoader(
         const endpoint = managedEndpointIdentity(agent.endpoint);
         const ours =
           endpoint !== undefined &&
-          [managedAgent.endpoint, managedAgent.alsoRun]
+          [managedAgent.endpoint, managedAgent.alsoRun, managedAgent.localRun]
             .filter((url): url is URL => url !== undefined)
             .some((url) => endpoint === managedEndpointIdentity(url));
         if (ours) {

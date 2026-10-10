@@ -131,3 +131,11 @@ agents:
     avatar_seed: risk-analyst-chatgpt
     type: remote-ag-ui
     endpoint: ${CHATGPT_BOT_URL:-}
+
+  - id: local-qwen
+    name: Local Qwen
+    title: Local Model
+    role_description: Help with tasks using the local model and tools granted to this Bot. Cite sources you actually accessed and report tool failures accurately.
+    avatar_seed: local-qwen
+    type: remote-ag-ui
+    endpoint: ${LOCAL_BOT_URL:-}

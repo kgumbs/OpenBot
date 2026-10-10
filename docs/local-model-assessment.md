@@ -56,5 +56,6 @@ Sources checked on the assessment date:
 - https://docs.copilotkit.ai/intelligence/self-hosting-local
 - https://docs.ollama.com/api/openai-compatibility
 
-Next implementation: the isolated local Bot profile, retaining managed Intelligence
-and both working subscriptions. Moving Intelligence is a separate migration.
+The isolated local Bot profile is implemented; see [Local Qwen](local-model.md).
+Managed Intelligence and both subscriptions remain configured. Moving Intelligence
+is a separate migration.

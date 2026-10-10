@@ -157,12 +157,18 @@ def _model():
         )
     provider = _resolve_provider(settings.provider)
     model = settings.model
+    local_options = (
+        {"max_tokens": 2048, "reasoning_effort": "none", "timeout": 120, "max_retries": 0}
+        if os.environ.get("OPENBOT_LOCAL_MODEL") == "true" and provider == "openai"
+        else {}
+    )
     prefix, separator, _ = model.partition(":")
     if separator and prefix in MODEL_PROVIDERS:
-        return init_chat_model(model, **_google_genai_kwargs(prefix))
+        return init_chat_model(model, **local_options, **_google_genai_kwargs(prefix))
     return init_chat_model(
         model,
         model_provider=provider,
+        **local_options,
         **_google_genai_kwargs(provider),
     )
 

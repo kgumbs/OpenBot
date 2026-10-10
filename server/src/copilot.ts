@@ -1459,6 +1459,7 @@ function remoteAgentWithStandingRole(
         agent.headers?.["x-openbot-agent-token"] ===
           process.env.MANAGED_AGENT_TOKEN &&
         [
+          process.env.OPENBOT_LOCAL_MODEL === "true" ? process.env.LOCAL_BOT_URL : undefined,
           process.env.PICKED_HARNESS_URL,
           process.env.MANAGED_AGENT_AG_UI_URL,
         ].some(

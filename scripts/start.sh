@@ -246,6 +246,7 @@ SERVICES+=(agent-computer)
 # so requiring it would prevent an Anthropic-only deployment from reaching its managed Bot.
 if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
   SERVICES+=(agent-claude-sdk)
+  if [ "${OPENBOT_LOCAL_MODEL:-}" = "true" ]; then SERVICES+=(agent-local); fi
   if [ "${OPENBOT_LOCAL_CHATGPT:-}" = "true" ]; then SERVICES+=(agent-chatgpt); fi
 else
   if [ "$BOT_PROVIDER" != "anthropic" ]; then
@@ -283,6 +284,7 @@ fi
 wait_for "http://localhost:$COMPUTER_PORT/health" "agent-computer"
 if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
   wait_for "http://127.0.0.1:4212/health" "agent-claude-sdk"
+  if [ "${OPENBOT_LOCAL_MODEL:-}" = "true" ]; then wait_for "http://127.0.0.1:4207/health" "agent-local"; fi
   if [ "${OPENBOT_LOCAL_CHATGPT:-}" = "true" ]; then wait_for "http://127.0.0.1:4206/health" "agent-chatgpt"; fi
 else
   if [ "$BOT_PROVIDER" != "anthropic" ]; then wait_for "http://localhost:$BOT_PORT/health" "agent-bot"; fi

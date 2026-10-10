@@ -29,6 +29,14 @@ describe("Doctor readiness and privacy", () => {
     expect(commands.some(a => a.some(x => /^(restart|stop|up|down|rm|chown)$/.test(x)))).toBe(false);
     expect(commands.find(a => a.includes("psql"))?.at(-1)).toStartWith("select ");
   });
+  test("enabled local model must have a healthy LangGraph endpoint", async () => {
+    const f = fixture(); const read = f.deps.read; const http = f.deps.http;
+    f.deps.read = async path => path.endsWith("/.env") ? `${await read(path)}\nOPENBOT_LOCAL_MODEL=true` : read(path);
+    f.deps.http = async url => url.includes(":4207/") ? { status: 200, body: { ok: true, harness: "langgraph" } } : http(url, 100);
+    expect(check(await doctor({ root }, f.deps), "local-model")?.status).toBe("pass");
+    f.deps.http = async url => url.includes(":4207/") ? { status: 503 } : http(url, 100);
+    expect(check(await doctor({ root }, f.deps), "local-model")?.status).toBe("fail");
+  });
   test("missing configuration fails without leaking response bodies", async () => {
     const { deps } = fixture({ read: async () => undefined, http: async () => ({ status: 500, body: { error: "secret-error" } }) });
     const r = await doctor({ root }, deps);
