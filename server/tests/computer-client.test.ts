@@ -559,3 +559,18 @@ describe("a person's Stop", () => {
     ).rejects.toThrow("The assistant's computer is not running.");
   });
 });
+
+test("browser navigation and snapshot timeouts are not reported as missing elements", async () => {
+  for (const error of [
+    "page.goto: Timeout 30000ms exceeded.",
+    "page.ariaSnapshot: Timeout 30000ms exceeded.",
+  ]) {
+    const client = clientWith(() => Response.json({ error }, { status: 500 }));
+    await expect(
+      client.navigate("https://example.com/"),
+    ).rejects.toBeInstanceOf(ComputerUnavailableError);
+    await expect(client.navigate("https://example.com/")).rejects.toThrow(
+      error,
+    );
+  }
+});

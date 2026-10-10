@@ -89,3 +89,22 @@ Knowledge (Local) take-control/handback cycle succeeded, but its subsequent chat
 60-second silent-stream timeout before returning a result. End-to-end recovery therefore remains
 unverified in this run. Doctor reported the native folder broker disconnected; API and computer
 health endpoints responded. These runtime issues are separate from the passing regression tests.
+
+## Follow-up: stalled browser and misleading timeout errors
+
+The original computer response was HTTP 502, `ariaSnapshot: Timeout 30000ms exceeded.`
+The server incorrectly mapped every Playwright timeout to a missing-element error. It now maps
+only locator failures naming an `aria-ref` that way; general browser timeouts retain their original
+message as computer-unavailable errors. Regression coverage includes navigation and snapshot timeouts.
+
+Knowledge's browser was consuming approximately 172% CPU and 1.49 GiB when inspected. This is an
+observation, not proof of the cause of the separate model stream stall. Restarting only its computer
+restored snapshot/navigation responsiveness and retained its profile and workspace.
+
+Live API verification then completed request-help, take-control, handback and navigation to
+example.com: all four returned HTTP 200, with title `Example Domain`. No manual snapshot call was
+made between handback and navigation, verifying the gateway's automatic recovery against the real
+computer. The local model's silent-stream timeout has not been independently proven resolved.
+
+Validation: 111 client/gateway/headless tests passed; server TypeScript check passed.
+Next: check the local model's response latency and the disconnected desktop folder broker.
