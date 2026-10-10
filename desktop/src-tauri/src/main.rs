@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 mod desktop_connection;
 mod desktop_host_access;
+mod clone_host_access;
 mod desktop_telemetry;
 
 #[cfg(test)]
@@ -3895,6 +3896,9 @@ fn main() {
             )?;
             app.set_menu(Menu::with_items(app, &[&openbot, &edit])?)?;
             app.on_menu_event(|app, event| chose(app, event.id().as_ref()));
+            if let Some(broker) = clone_host_access::attach(app.handle())? {
+                *app.state::<Shell>().host_access.lock().unwrap() = Some(broker);
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

@@ -1,4 +1,5 @@
 import Docker from "dockerode";
+import chromiumSeccomp from "../chromium-seccomp.json";
 import {
   BOT_LABEL,
   type ComputerNames,
@@ -379,6 +380,8 @@ async function waitUntilAnswering(
 
 export type EnsureOptions = {
   image: string;
+  /** Enable the restricted namespace policy for a non-root Chromium image. */
+  chromiumSandbox?: boolean;
   /** Passed to the computer so a Bot's traffic still leaves by the route configured for it. */
   environment: string[];
   /** A network to join, when the supervisor runs alongside a compose stack. */
@@ -415,7 +418,7 @@ export type EnsureOptions = {
  * off the host, and none of them costs a Bot anything it legitimately needs: a browser and a
  * filesystem under `/workspace`.
  */
-function hostConfig(names: ComputerNames, options: EnsureOptions) {
+export function hostConfig(names: ComputerNames, options: EnsureOptions) {
   return {
     // The Bot's own storage. This is what turns the path confinement inside the computer from a
     // boundary between a Bot and the host into a boundary between one Bot and another.
@@ -447,7 +450,10 @@ function hostConfig(names: ComputerNames, options: EnsureOptions) {
     ...(options.runtime ? { Runtime: options.runtime } : {}),
 
     // No path from inside to more privilege than it started with, whatever it manages to run.
-    SecurityOpt: ["no-new-privileges:true"],
+    SecurityOpt: [
+      "no-new-privileges:true",
+      ...(options.chromiumSandbox ? [`seccomp=${JSON.stringify(chromiumSeccomp)}`] : []),
+    ],
     // Chromium needs none of these, and each is a documented container escape route.
     CapDrop: ["ALL"],
     // A runaway Bot is a resource problem for itself, not for every other Bot on the host.

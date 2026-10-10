@@ -1,0 +1,8 @@
+# Local Docker Desktop browser with Chromium namespace and seccomp sandboxing.
+# Build the ordinary computer image first; this layer retains its pinned browser.
+FROM openbot-agent-computer:latest
+USER root
+RUN mkdir -p /profiles /workspace && chown -R 1000:1000 /profiles /workspace
+ENV COMPUTER_SANDBOX=on
+ENV HOME=/home/ubuntu
+USER 1000:1000

@@ -35,6 +35,7 @@ export function environmentFor(
       ? ["SPIFFE_ENDPOINT_SOCKET=/tmp/spire-agent/public/api.sock"]
       : []),
     ...(browserMode ? [`COMPUTER_BROWSER_MODE=${browserMode}`] : []),
+    ...(env.COMPUTER_SANDBOX === "on" ? ["COMPUTER_SANDBOX=on"] : []),
     ...passthrough.map(([key, value]) => `${key}=${value ?? ""}`),
   ];
 }

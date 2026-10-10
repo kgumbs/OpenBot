@@ -19,6 +19,7 @@ RUN bun install --frozen-lockfile
 COPY --from=spire /opt/spire/bin/spire-server /usr/local/bin/spire-server
 
 COPY supervisor/src ./src
+COPY supervisor/chromium-seccomp.json ./chromium-seccomp.json
 
 EXPOSE 4300
 CMD ["bun", "src/index.ts"]

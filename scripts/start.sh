@@ -244,12 +244,17 @@ fi
 SERVICES+=(agent-computer)
 # The managed coworker uses LangGraph. The separate legacy sample only accepts OpenAI keys,
 # so requiring it would prevent an Anthropic-only deployment from reaching its managed Bot.
-if [ "$BOT_PROVIDER" = "anthropic" ]; then
-  info "  agent-bot: skipped for Anthropic (OpenAI-only sample)"
+if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
+  SERVICES+=(agent-claude-sdk)
+  if [ "${OPENBOT_LOCAL_CHATGPT:-}" = "true" ]; then SERVICES+=(agent-chatgpt); fi
 else
-  SERVICES+=(agent-bot)
+  if [ "$BOT_PROVIDER" != "anthropic" ]; then
+    SERVICES+=(agent-bot)
+  else
+    info "  agent-bot: skipped for Anthropic (OpenAI-only sample)"
+  fi
+  SERVICES+=(agent-langgraph)
 fi
-SERVICES+=(agent-langgraph)
 
 export SUPERVISOR_TOKEN COMPUTER_TOKEN WORKER_SHARED_SECRET
 export COMPUTER_PORT BOT_PORT LANGGRAPH_PORT SUPERVISOR_PORT
@@ -258,17 +263,31 @@ export COMPUTER_PORT BOT_PORT LANGGRAPH_PORT SUPERVISOR_PORT
 # stdout, and stops with "failed to get console: provided file is not a console". An environment
 # variable rather than `--progress`, because a Compose too old to know the flag refuses it, and one
 # too old to know the variable ignores it.
-COMPOSE_PROGRESS=quiet docker compose up -d --build "${SERVICES[@]}" >/dev/null
-if ! docker compose run --rm --build migrate >"$LOGS/migrate.log" 2>&1; then
+if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
+  COMPOSE_PROGRESS=quiet docker compose up -d "${SERVICES[@]}" >/dev/null
+else
+  COMPOSE_PROGRESS=quiet docker compose up -d --build "${SERVICES[@]}" >/dev/null
+fi
+migrate_database() {
+  if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
+    bun run --cwd server db:migrate
+  else
+    docker compose run --rm --build migrate
+  fi
+}
+if ! migrate_database >"$LOGS/migrate.log" 2>&1; then
   red "  Migrations did not apply. The database is not the schema this server expects."
   red "  Log: $LOGS/migrate.log"
   exit 1
 fi
 wait_for "http://localhost:$COMPUTER_PORT/health" "agent-computer"
-if [ "$BOT_PROVIDER" != "anthropic" ]; then
-  wait_for "http://localhost:$BOT_PORT/health" "agent-bot"
+if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
+  wait_for "http://127.0.0.1:4212/health" "agent-claude-sdk"
+  if [ "${OPENBOT_LOCAL_CHATGPT:-}" = "true" ]; then wait_for "http://127.0.0.1:4206/health" "agent-chatgpt"; fi
+else
+  if [ "$BOT_PROVIDER" != "anthropic" ]; then wait_for "http://localhost:$BOT_PORT/health" "agent-bot"; fi
+  wait_for "http://localhost:$LANGGRAPH_PORT/health" "agent-langgraph"
 fi
-wait_for "http://localhost:$LANGGRAPH_PORT/health" "agent-langgraph"
 
 for table in agent_profiles agent_preferences; do
   if ! docker compose exec -T postgres \
@@ -339,6 +358,10 @@ if identifies_as_openbot "$SERVER_PORT" server; then
       ;;
   esac
 fi
+if [ "${OPENBOT_LOCAL_SUBSCRIPTION:-}" = "claude" ]; then
+  stop_server_processes_for_restart
+  sleep 1
+fi
 if ! identifies_as_openbot "$SERVER_PORT" server; then
   if [ "$ONE_COMPUTER_EACH" = "true" ]; then
     (cd server && PORT="$SERVER_PORT" \
@@ -397,7 +420,10 @@ bun run - "$INFO" <<'JS'
 const info = JSON.parse(process.argv[2]);
 const status = info.licenseStatus;
 const agents = Object.keys(info.agents ?? {});
-if (status !== "valid") {
+// Keep the local interface available during a transient upstream outage.
+// Runtime entitlement enforcement remains in the API; invalid licences still fail.
+const upstreamUnavailable = status === "unknown" && info.runtimeEntitlements?.status === "unavailable";
+if (status !== "valid" && !upstreamUnavailable) {
   console.log(`\x1b[31m  licence is '${status}', not 'valid'.\x1b[0m`);
   console.log("\x1b[31m  Check INTELLIGENCE_API_KEY: npx copilotkit@latest login && npx copilotkit@latest project select\x1b[0m");
   console.log("\x1b[31m  See README.md for Intelligence setup.\x1b[0m");
@@ -407,7 +433,11 @@ if (agents.length === 0) {
   console.log("\x1b[31m  No Bots registered.\x1b[0m");
   process.exit(1);
 }
-console.log(`\x1b[32m  licence valid · mode ${info.mode} · Bots: ${agents.join(", ")}\x1b[0m`);
+if (upstreamUnavailable) {
+  console.log("\x1b[33m  Intelligence is unavailable; starting the local interface. Bot runs remain subject to runtime entitlement checks.\x1b[0m");
+} else {
+  console.log(`\x1b[32m  licence valid · mode ${info.mode} · Bots: ${agents.join(", ")}\x1b[0m`);
+}
 JS
 
 info "4/4  App"

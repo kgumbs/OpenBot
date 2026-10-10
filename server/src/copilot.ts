@@ -1429,6 +1429,8 @@ function remoteAgentWithStandingRole(
             execute: (args) => tool.execute(args),
           })),
           initiator,
+          // Browser calls belong to the interactive surface, not these server tools.
+          false,
         ).run(prepared, next);
       }),
     );

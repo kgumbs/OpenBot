@@ -104,6 +104,7 @@ app.post("/computers/:botId/ensure", async (context) => {
 
     const state = await ensure(parsed.names, {
       image,
+      chromiumSandbox: process.env.COMPUTER_SANDBOX === "on",
       environment: environmentFor(parsed.names.botId),
       ...(network ? { network } : {}),
       ...(runtime ? { runtime } : {}),

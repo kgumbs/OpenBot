@@ -600,3 +600,21 @@ test("human help creates a durable suspension, persists the waiting event, and r
   );
   expect(lockCalls).toEqual(["acquire", "cleanup"]);
 });
+
+
+test("interactive remote browser calls pass through server-tool middleware", async () => {
+  const remote = remoteTurn((input) => lifecycle(input, toolCall("computer_snapshot", "{}")));
+  const events: BaseEvent[] = [];
+  const input: RunAgentInput = {
+    threadId: "browser-routing-test", runId: "browser-routing-run",
+    messages: [], state: {}, tools: [definition], context: [], forwardedProps: {},
+  };
+  await new Promise<void>((resolve, reject) => {
+    new headless.HeadlessToolsMiddleware([], undefined, false)
+      .run(input, remote.agent)
+      .subscribe({next: (event) => events.push(event), error: reject, complete: resolve});
+  });
+  expect(remote.requests).toHaveLength(1);
+  expect(events.some((event) => event.type === EventType.TOOL_CALL_START)).toBe(true);
+  expect(events.filter((event) => event.type === EventType.TOOL_CALL_RESULT)).toHaveLength(0);
+});
