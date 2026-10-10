@@ -233,3 +233,5 @@ The desktop reports why a selected folder is blocked:
 Select a dedicated folder such as `/Users/kgumbs/development/BotFiles` outside the protected clone and credential locations. The message does not disclose protected absolute paths. Symlinks are resolved before validation, so a shortcut does not change access restrictions. No folder is granted automatically.
 
 These messages are native desktop code: use the rebuilt executable on the next desktop restart. The existing process continues using its previous version until restarted.
+
+For imported root-owned browser volumes, use the [preview-first storage repair command](browser-storage-repair.md). Healthy running volumes do not need migration.
