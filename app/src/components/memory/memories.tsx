@@ -212,6 +212,12 @@ function MemoryRow({
             )}
           </ItemDescription>
         )}
+        {memory.formedBy === "bot" && !memory.sourceRef ? (
+          <ItemDescription className="line-clamp-none">
+            Origin unverified. Kept for your review and excluded from Bot
+            recall.
+          </ItemDescription>
+        ) : null}
         {/* A set, so it wraps onto its own line rather than crowding the fact. */}
         <ItemFooter>
           <div className="flex flex-wrap gap-2">

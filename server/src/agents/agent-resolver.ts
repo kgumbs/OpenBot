@@ -69,6 +69,7 @@ export type ActorAgentResolverDependencies = {
   markAttachmentsSentForActor?: (actorId: string) => MarkAttachmentsSent;
   acquireLearnedSkills?: AcquireLearnedSkills;
   loadPersonalMemoryForActor?: (actorId: string) => LoadPersonalMemory;
+  loadResourceStatus?: LoadPersonalMemory;
 };
 
 /**
@@ -112,6 +113,7 @@ export function createActorAgentResolver(
       deps.markAttachmentsSentForActor?.(actor.id),
       deps.acquireLearnedSkills,
       deps.loadPersonalMemoryForActor?.(actor.id),
+      deps.loadResourceStatus,
     );
 
   const resolveAgentsForActor = async (actor: AgentActor) =>

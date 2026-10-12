@@ -92,6 +92,7 @@ test("a memory a Bot formed names the Bot that formed it", async () => {
   serving();
   const view = draw(<MemoryList />);
   expect(await view.findByText(/Formed by Expenses/)).toBeTruthy();
+  expect(view.getByText(/Origin unverified/)).toBeTruthy();
 });
 
 test("remembering a fact saves it", async () => {

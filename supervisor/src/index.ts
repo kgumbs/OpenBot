@@ -1,3 +1,4 @@
+import { resourceSnapshot } from "./resources";
 import { serve } from "bun";
 import { Hono } from "hono";
 import { authorised } from "./authorisation";
@@ -188,6 +189,15 @@ app.post("/computers/:botId/reset", async (context) => {
     }
     throw error;
   }
+});
+
+app.get("/resources", async (context) =>
+  context.json(await resourceSnapshot()),
+);
+app.get("/resources/:botId", async (context) => {
+  const parsed = resolve(context.req.param("botId"));
+  if (!parsed.ok) return context.json({ error: parsed.reason }, 400);
+  return context.json(await resourceSnapshot(parsed.names));
 });
 
 app.get("/computers", async (context) => {

@@ -364,3 +364,75 @@ test("a Bot-formed memory reaches only its Bot, only while it holds the source a
   await plugins.grant("mcp", ref, bot, owner);
   expect(await recalled(bot)).toBe(true);
 });
+
+test("identical observations deduplicate within each Bot without losing another Bot's memory", async () => {
+  const content = `Shared observation ${randomUUID()}`;
+  const save = (agentId: string) =>
+    memory.formMemory(owner, {
+      agentId,
+      content,
+      sourceApp: "Conversation",
+      sourceRef: "conversation",
+    });
+  const results = await Promise.all([
+    save(bot),
+    save(bot),
+    save(secondBot),
+    save(secondBot),
+  ]);
+  expect(new Set(results.map((row) => row.id)).size).toBe(2);
+  expect(results.filter((row) => !row.duplicate)).toHaveLength(2);
+  const first = (await ingestion.recall(owner, bot, content))[0]!;
+  const second = (await ingestion.recall(owner, secondBot, content))[0]!;
+  expect(first.formedByAgentId).toBe(bot);
+  expect(second.formedByAgentId).toBe(secondBot);
+  expect(first.id).not.toBe(second.id);
+  await memory.remove(owner, first.id);
+  expect(await save(bot)).toMatchObject({
+    id: first.id,
+    duplicate: true,
+    forgotten: true,
+  });
+  expect(await ingestion.recall(owner, bot, content)).toHaveLength(0);
+  expect(await ingestion.recall(owner, secondBot, content)).toHaveLength(1);
+});
+
+test("unknown legacy origins are preserved for owner review but excluded from Bot recall", async () => {
+  const content = `Legacy source ${randomUUID()}`;
+  const row = await memory.formMemory(owner, {
+    agentId: bot,
+    content,
+    sourceApp: "Calendar",
+  });
+  expect((await memory.list(owner)).some((entry) => entry.id === row.id)).toBe(
+    true,
+  );
+  expect(await ingestion.recall(owner, bot, content)).toHaveLength(0);
+});
+
+test("revoking the exact source action hides observations even if another app action remains granted", async () => {
+  const content = `Exact action ${randomUUID()}`;
+  const alternate = `${server}/read_project`;
+  await database
+    .insert(mcpTools)
+    .values({
+      serverId: server,
+      name: "read_project",
+      effect: "read",
+      inputSchema: {},
+    });
+  await plugins.grant("mcp", alternate, bot, owner);
+  await memory.formMemory(owner, {
+    agentId: bot,
+    content,
+    sourceApp: "Issue tracker",
+    sourceRef: ref,
+  });
+  expect(await ingestion.recall(owner, bot, content)).toHaveLength(1);
+  await plugins.revoke("mcp", ref, bot, owner);
+  try {
+    expect(await ingestion.recall(owner, bot, content)).toHaveLength(0);
+  } finally {
+    await plugins.grant("mcp", ref, bot, owner);
+  }
+});

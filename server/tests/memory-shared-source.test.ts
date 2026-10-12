@@ -85,3 +85,34 @@ describe("a memory source on a Shared app", () => {
     ).rejects.toThrow(/Reconnect this app/);
   });
 });
+
+test("observed memories lose eligibility when the shared account is disconnected", async () => {
+  let connected = true;
+  let eligible: Set<string> = new Set();
+  const ingestion = createMemoryIngestion({
+    store: {
+      sources: async () => [],
+      formedSourceRefs: async () => [{ ref: tool.ref }],
+      retrieve: async (
+        _owner: string,
+        _sources: string[],
+        _search: string,
+        formed: { heldToolRefs: Set<string> },
+      ) => {
+        eligible = formed.heldToolRefs;
+        return [];
+      },
+    } as never,
+    plugins: {
+      agentOwner: async () => "owner",
+      listForAgent: async () => ({ tools: [tool] }),
+      listServers: async () => [server("shared")],
+      deploymentConnectionFor: async () => (connected ? {} : null),
+    } as never,
+  });
+  await ingestion.recall("owner", "bot");
+  expect(eligible.has(tool.ref)).toBe(true);
+  connected = false;
+  await ingestion.recall("owner", "bot");
+  expect(eligible.has(tool.ref)).toBe(false);
+});

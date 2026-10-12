@@ -533,6 +533,7 @@ export async function buildAgents(
   markAttachmentsSent?: MarkAttachmentsSent,
   acquireLearnedSkills?: AcquireLearnedSkills,
   loadPersonalMemory?: LoadPersonalMemory,
+  loadResourceStatus?: LoadPersonalMemory,
 ): Promise<Record<string, AbstractAgent>> {
   let vendors: readonly string[] = [];
   try {
@@ -592,6 +593,13 @@ export async function buildAgents(
         );
         if (loadPersonalMemory)
           built.use(new PersonalMemoryMiddleware(agent.id, loadPersonalMemory));
+        if (loadResourceStatus)
+          built.use(
+            new PersonalMemoryMiddleware(agent.id, loadResourceStatus, {
+              id: "openbot:resource-status",
+              description: "OpenBot resource status",
+            }),
+          );
         return [agent.id, built];
       }),
     ),
@@ -1914,6 +1922,7 @@ export async function resolveRuntimeAgents(
   markAttachmentsSent?: MarkAttachmentsSent,
   acquireLearnedSkills?: AcquireLearnedSkills,
   loadPersonalMemory?: LoadPersonalMemory,
+  loadResourceStatus?: LoadPersonalMemory,
 ): Promise<Record<string, AbstractAgent>> {
   const all = await loadAgents();
   if (all.length === 0) {
@@ -1950,6 +1959,7 @@ export async function resolveRuntimeAgents(
     markAttachmentsSent,
     acquireLearnedSkills,
     loadPersonalMemory,
+    loadResourceStatus,
   );
 }
 

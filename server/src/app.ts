@@ -1,3 +1,5 @@
+import { createResourceRoutes } from "./resources/routes";
+import type { ResourceService } from "./resources/service";
 import { createRiskReviewRoutes } from "./risk-review/routes";
 import { resolve as resolveRiskRoot } from "node:path";
 import type { Hono as HonoApp, MiddlewareHandler } from "hono";
@@ -412,6 +414,7 @@ export function createApp(
       >;
       webhooks: Parameters<typeof createDeliveryWebhookRoutes>[0];
     };
+    resources?: ResourceService;
     memory?: { store: MemoryStore; ingestion: MemoryIngestion };
     proactive?: { store: ProactiveStore; engine: ProactiveEngine };
     responsibilities?: {
@@ -1328,6 +1331,12 @@ export function createApp(
     ? async (actor, botId) =>
         (await agentProfileStore.get(actor, botId)) !== null
     : async () => true;
+
+  if (coworker?.resources)
+    app.route(
+      "/api/resources",
+      createResourceRoutes(coworker.resources, requireUser, canUseBot),
+    );
 
   // The Bot computer. Acting on a page needs the gateway and the policy it enforces, so both arrive
   // together or the routes are not mounted. An ungoverned computer is not a reduced feature. It is

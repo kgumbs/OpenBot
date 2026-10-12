@@ -10,6 +10,7 @@ import { createMemoryRoutes } from "../src/memory/routes";
 import type { MemoryStore } from "../src/memory/store";
 import { memoryTools } from "../src/memory/tools";
 import {
+  MemoryRefusedError,
   parseMemoryInput,
   parseMemoryPatch,
   parseMemorySourceInput,
@@ -129,16 +130,17 @@ test("every memory tool can be offered to a remote Bot as JSON Schema", async ()
   const observed = tools.find((tool) => tool.name === "save_observed_memory");
   await observed?.execute({
     content: "Prefers morning meetings",
-    sourceApp: "Calendar",
+    sourceApp: "Conversation",
+    sourceKind: "conversation",
     observedAt: "2026-09-01T09:00:00Z",
   });
   expect(formed).toEqual([
     {
       content: "Prefers morning meetings",
-      sourceApp: "Calendar",
+      sourceApp: "Conversation",
       observedAt: new Date("2026-09-01T09:00:00Z"),
       agentId: "bot",
-      sourceRef: null,
+      sourceRef: "conversation",
     },
   ]);
 });
@@ -161,4 +163,46 @@ test("a source sync a connector's policy refuses answers 400 with the reason, no
   });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ error: "Tool refused by policy." });
+});
+
+test("observed app facts require an authorized exact source reference", async () => {
+  const writes: unknown[] = [];
+  const reads: unknown[] = [];
+  const tool = memoryTools({
+    ownerUserId: "owner",
+    agentId: "bot",
+    store: {
+      formMemory: async (_owner: string, input: unknown) => {
+        writes.push(input);
+        return { id: "new" };
+      },
+    } as never,
+    ingestion: {
+      authorize: async (source: { toolRef: string }) => {
+        reads.push(source);
+        if (source.toolRef !== "drive/read")
+          throw new MemoryRefusedError("Access revoked.");
+      },
+    } as never,
+  }).find((tool) => tool.name === "save_observed_memory")!;
+  const fact = {
+    content: "Prefers mornings",
+    sourceApp: "Drive",
+    sourceKind: "app",
+  };
+  expect(await tool.execute(fact)).toContain("Refused.");
+  expect(await tool.execute({ ...fact, sourceRef: "other/read" })).toContain(
+    "Access revoked",
+  );
+  expect(await tool.execute({ ...fact, sourceKind: "conversation" })).toContain(
+    "Refused.",
+  );
+  expect(writes).toHaveLength(0);
+  await tool.execute({ ...fact, sourceRef: "drive/read" });
+  expect(reads).toContainEqual({
+    ownerUserId: "owner",
+    agentId: "bot",
+    toolRef: "drive/read",
+  });
+  expect(writes[0]).toMatchObject({ sourceRef: "drive/read", agentId: "bot" });
 });

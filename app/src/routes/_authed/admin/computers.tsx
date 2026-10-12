@@ -1,3 +1,4 @@
+import { ResourceStatus } from "@/components/computer/resource-status";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -119,6 +120,7 @@ function ComputersPage() {
       description="Each Bot's browser and the profile it keeps. A profile is what makes a Bot still signed in tomorrow, and resetting one signs it out of everything."
       title="Computers"
     >
+      <ResourceStatus detail />
       {problem ? (
         <p
           className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
@@ -309,6 +311,7 @@ function ComputersPage() {
                           : `Leaves through ${computer.egress}`}
                       {computer.updateAvailable ? " · Update available" : ""}
                     </ItemDescription>
+                    <ResourceStatus detail botId={computer.botId} />
                     <ComputerToolCheck botId={computer.botId} />
                   </ItemContent>
                   <ItemActions>

@@ -1,3 +1,8 @@
+import {
+  createResourceService,
+  resourceTools,
+  resourceGuidance,
+} from "./resources/service";
 import { fileGrantStore } from "./host-access/grant-store";
 import { resolve as resolveHostGrantPath } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -1070,6 +1075,15 @@ const hostAccessBroker = createHostAccessBroker(Date.now, {
 // grant, the policy and the audit row are exactly where they were. Host-folder tools are also
 // server-dispatched: the selected Bot and the signed-in owner are bound here, then the desktop worker
 // receives only opaque grant ids and relative paths.
+const resources = createResourceService({
+  supervisor:
+    config.computer?.provider === "docker"
+      ? {
+          baseUrl: config.computer.baseUrl,
+          token: config.computer.supervisorToken,
+        }
+      : undefined,
+});
 const personalMemoryStore = createMemoryStore(database);
 const demonstrationStore = createDemonstrationStore(database);
 const demonstrationRecorder = createDemonstrationRecorder({
@@ -1124,6 +1138,7 @@ const teamBots = createTeamBots({
 const loadToolsForActor =
   (actorId: string, initiator: AuditInitiator = PERSON_INITIATOR) =>
   async (botId: string) => [
+    ...resourceTools(resources, botId),
     ...wakeUpTools({
       store: wakeUpStore,
       ownerUserId: actorId,
@@ -1754,6 +1769,8 @@ const actorAgentResolver = createActorAgentResolver({
     return copilotRuntime.learning?.acquire;
   },
   loadPersonalMemoryForActor,
+  loadResourceStatus: async (botId) =>
+    resourceGuidance(await resources.snapshot(botId)),
 });
 
 const copilotRuntime = mountCopilotRuntime(
@@ -2957,6 +2974,10 @@ const app = createApp(
       return { text, isError: text.startsWith(REFUSAL_MARKER) };
     }
     const { name, args, botId, actorId, initiator } = input;
+    const resource = resourceTools(resources, botId).find(
+      (tool) => tool.name === name,
+    );
+    if (resource) return { text: await resource.execute(args), isError: false };
     const memory = memoryTools({
       store: personalMemoryStore,
       ingestion: memoryIngestion,
@@ -3038,6 +3059,7 @@ const app = createApp(
         twilio: deliveryProviders.sms,
       },
     },
+    resources,
     memory: { store: personalMemoryStore, ingestion: memoryIngestion },
     proactive: { store: proactiveStore, engine: proactiveEngine },
     responsibilities: {

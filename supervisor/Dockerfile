@@ -18,6 +18,7 @@ RUN bun install --frozen-lockfile
 
 COPY --from=spire /opt/spire/bin/spire-server /usr/local/bin/spire-server
 
+COPY shared/resources.ts shared/resource-monitor.ts /shared/
 COPY supervisor/src ./src
 COPY supervisor/chromium-seccomp.json ./chromium-seccomp.json
 

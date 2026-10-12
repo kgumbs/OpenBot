@@ -301,7 +301,8 @@ test("recall reaches this Bot's memories however many other Bots' are newer", as
     id: mine,
     ownerUserId: owner,
     content: "The quarterly review is in the Lisbon office",
-    provenance: "Read from Docs",
+    provenance: "Conversation",
+    sourceRef: "conversation",
     formedBy: "bot",
     formedByAgentId: bot,
   });

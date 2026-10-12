@@ -258,14 +258,22 @@ export function createMemoryIngestion(options: {
     }
     return eligible;
   }
-  async function formedFor(botId: string) {
-    const grants = await plugins.listForAgent(botId);
-    return {
-      botId,
-      heldServerIds: new Set(
-        grants.tools.map((tool) => tool.ref.split("/")[0] ?? ""),
-      ),
-    };
+  async function formedFor(ownerUserId: string, botId: string) {
+    const heldToolRefs = new Set<string>();
+    for (const { ref } of await store.formedSourceRefs(ownerUserId, botId)) {
+      if (!ref || ref === "conversation") continue;
+      try {
+        await authorize({ ownerUserId, agentId: botId, toolRef: ref });
+        heldToolRefs.add(ref);
+      } catch (error) {
+        if (
+          !(error instanceof MemoryRefusedError) &&
+          !(error instanceof PluginRefusedError)
+        )
+          throw error;
+      }
+    }
+    return { botId, heldToolRefs };
   }
   return {
     authorize,
@@ -297,7 +305,7 @@ export function createMemoryIngestion(options: {
         ownerUserId,
         await eligibleSources(ownerUserId, botId),
         search.slice(0, 200),
-        await formedFor(botId),
+        await formedFor(ownerUserId, botId),
       );
     },
     async contextFor(ownerUserId: string, botId: string) {
@@ -306,7 +314,7 @@ export function createMemoryIngestion(options: {
           ownerUserId,
           await eligibleSources(ownerUserId, botId),
           "",
-          await formedFor(botId),
+          await formedFor(ownerUserId, botId),
         ),
       );
     },

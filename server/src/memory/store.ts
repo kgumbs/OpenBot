@@ -1,5 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Database } from "../db/client";
 import { memorySources, personalMemories } from "../db/schema/memory";
 import {
@@ -57,7 +67,7 @@ export function createMemoryStore(database: Database) {
     /**
      * A memory a Bot formed from something it observed, awaiting the person's review.
      *
-     * Deduplicated on content, deleted rows included: a memory the person forgot stays forgotten
+     * Deduplicated per Bot on content, deleted rows included: a memory the person forgot stays forgotten
      * even when the Bot reads the same record again tomorrow.
      */
     async formMemory(ownerUserId: string, input: FormedMemoryInput) {
@@ -84,6 +94,7 @@ export function createMemoryStore(database: Database) {
           and(
             eq(personalMemories.ownerUserId, ownerUserId),
             eq(personalMemories.formedBy, "bot"),
+            eq(personalMemories.formedByAgentId, input.agentId),
             eq(personalMemories.importDigest, digest),
           ),
         )
@@ -116,7 +127,11 @@ export function createMemoryStore(database: Database) {
           importDigest: digest,
         })
         .onConflictDoNothing({
-          target: [personalMemories.ownerUserId, personalMemories.importDigest],
+          target: [
+            personalMemories.ownerUserId,
+            personalMemories.formedByAgentId,
+            personalMemories.importDigest,
+          ],
           where: sql`${personalMemories.formedBy} = 'bot'`,
         })
         .returning({ id: personalMemories.id });
@@ -132,6 +147,7 @@ export function createMemoryStore(database: Database) {
           and(
             eq(personalMemories.ownerUserId, ownerUserId),
             eq(personalMemories.formedBy, "bot"),
+            eq(personalMemories.formedByAgentId, input.agentId),
             eq(personalMemories.importDigest, digest),
           ),
         )
@@ -333,35 +349,47 @@ export function createMemoryStore(database: Database) {
           .where(eq(memorySources.id, sourceId));
       });
     },
+    async formedSourceRefs(ownerUserId: string, botId: string) {
+      return database
+        .selectDistinct({ ref: personalMemories.sourceRef })
+        .from(personalMemories)
+        .where(
+          and(
+            eq(personalMemories.ownerUserId, ownerUserId),
+            eq(personalMemories.formedByAgentId, botId),
+            eq(personalMemories.formedBy, "bot"),
+            eq(personalMemories.enabled, true),
+            isNull(personalMemories.deletedAt),
+            isNotNull(personalMemories.sourceRef),
+          ),
+        );
+    },
     async retrieve(
       ownerUserId: string,
       eligibleSourceIds: string[],
       search = "",
       /**
        * The Bot asking and the app servers it currently holds. Bot-formed memories are returned
-       * only to the Bot that formed them, and only while it still holds their source app; without
+       * only to the Bot that formed them, and only while it still holds their authorized source tool; without
        * this argument none are returned.
        */
-      formed?: { botId: string; heldServerIds: ReadonlySet<string> },
+      formed?: { botId: string; heldToolRefs: ReadonlySet<string> },
     ) {
       /*
        * Every filter in the query, not after it. Taking the person's newest rows across all their
        * Bots and filtering here meant a person with busy sources on other Bots lost this Bot's older
        * memories altogether, and a search could never reach them.
        */
-      const held = [...(formed?.heldServerIds ?? [])];
+      const held = [...(formed?.heldToolRefs ?? [])];
       const term = search.trim();
       const formedByThisBot = formed
         ? and(
             eq(personalMemories.formedBy, "bot"),
             eq(personalMemories.formedByAgentId, formed.botId),
             or(
-              isNull(personalMemories.sourceRef),
+              eq(personalMemories.sourceRef, "conversation"),
               held.length > 0
-                ? inArray(
-                    sql<string>`split_part(${personalMemories.sourceRef}, '/', 1)`,
-                    held,
-                  )
+                ? inArray(personalMemories.sourceRef, held)
                 : sql`false`,
             ),
           )

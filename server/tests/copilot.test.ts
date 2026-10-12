@@ -2520,3 +2520,66 @@ describe("where an attachment reaches the model, and where it deliberately does 
     ).toMatchObject({ type: "data" });
   });
 });
+
+test("built-in and remote Bots receive fresh resource warnings through the production builder", async () => {
+  const seen: RunAgentInput[] = [];
+  const native = spyOn(BuiltInAgent.prototype, "run").mockImplementation(
+    (input) => {
+      seen.push(input);
+      return EMPTY;
+    },
+  );
+  const remote = spyOn(HttpAgent.prototype, "run").mockImplementation(
+    (input) => {
+      seen.push(input);
+      return EMPTY;
+    },
+  );
+  try {
+    for (const type of ["built_in", "remote_ag_ui"] as const) {
+      let warning = "Host memory pressure is critical.";
+      const args: Parameters<typeof buildAgents> = [
+        [
+          type === "built_in"
+            ? { id: "probe", name: "Probe", type, systemPrompt: "Work." }
+            : {
+                id: "probe",
+                name: "Probe",
+                type,
+                endpoint: "https://resource.test/ag-ui",
+                standingMessage: standingRoleMessage({
+                  ...riskRow,
+                  id: "probe",
+                }),
+              },
+        ],
+        { provider: "openai", defaultModel: "unused" },
+        "synthetic-key",
+      ];
+      args[17] = async (botId) => {
+        expect(botId).toBe("probe");
+        return warning;
+      };
+      const agent = built(await buildAgents(...args), "probe");
+      await agent.runAgent({ runId: "warning" });
+      expect(seen.at(-1)?.messages).toContainEqual(
+        expect.objectContaining({
+          id: "openbot:resource-status",
+          content: warning,
+        }),
+      );
+      warning = "";
+      await agent.runAgent({ runId: "recovered" });
+      expect(
+        seen
+          .at(-1)
+          ?.messages.some(
+            (message) => message.id === "openbot:resource-status",
+          ),
+      ).toBe(false);
+    }
+  } finally {
+    native.mockRestore();
+    remote.mockRestore();
+  }
+});

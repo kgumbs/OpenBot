@@ -1,3 +1,4 @@
+import { ResourceStatus } from "../components/computer/resource-status";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { currentUserQueryOptions, needsOnboarding } from "../lib/auth/queries";
 import { CopilotProvider } from "../lib/copilot/provider";
@@ -25,6 +26,7 @@ export const Route = createFileRoute("/_authed")({
   component: () => (
     <CopilotProvider>
       <AppHotkeys />
+      <ResourceStatus />
       <Outlet />
     </CopilotProvider>
   ),

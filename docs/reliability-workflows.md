@@ -45,3 +45,35 @@ After a turn, the chat shows recorded tool results, reported failures, unanswere
 Each runtime run receives an authoritative list of offered tools, including frontend tools and narrowed deployment grants. The instructions distinguish offered, successfully demonstrated, account-connected and folder-approved. The list is regenerated on the next run after grants change; an offered connector does not prove its account is connected. PDF extraction remains out of scope until reliability is established.
 
 Validation on October 12, 2026: 244 targeted tests passed across 14 files (695 assertions), including runtime prompt integration, access checks, connection failures, file read-back, history repair and UI confirmation. After correcting an overly strict browser-body assertion, the nine affected tests passed again. App and server typechecks pass. The supported launcher restarted successfully, Doctor reports ready, and General Assistant (ChatGPT)'s live gateway diagnostic passed shell, workspace write/read, cleanup and browser checks. The browser check requires the expected Example Domain title and nonempty readable text; it does not require the title to appear in the body. No paid model-inference test, connector-account probe, automatic external-action retry, or PDF work was performed. These checks establish the covered behaviors; longer multi-step model tasks still need outcome review.
+
+## Resource visibility and Bot memory boundaries
+
+Signed-in sessions poll `/api/resources` every 15 seconds. Admin → Computers shows host/API runtime,
+Docker runtime/VM and each Bot container separately. A warning banner appears across signed-in pages
+when the host or Docker runtime reports pressure. Bots get `system_resource_status` and current
+pressure warnings at the start of each run; a running model must call the tool to refresh its reading.
+Nothing is killed, deleted, restarted or replayed automatically.
+
+macOS uses the OS memory-pressure level rather than free RAM. Linux uses `MemAvailable`, which
+includes reclaimable memory; cgroup v2 process memory caps are checked separately when present. Memory/disk usage warns at 90% and is critical at 95%; filesystem free
+space below 1 GiB is critical. CPU warns after three 15-second samples at or above 90% and clears
+after two samples below 80%. Container memory excludes reclaimable file cache and says whether a
+per-container cap exists. Docker's OOM flag describes the last exit, not current pressure. Unsupported,
+missing and stale readings are unknown, never healthy. Host readings are unavailable when the API
+runs in a container; its OS-visible runtime and the Docker runtime are labelled separately. External
+model-provider capacity is outside these readings.
+
+`save_observed_memory` requires an explicit origin. Conversation observations use `Conversation`
+and the server-owned `conversation` reference. App observations require an exact read-action reference,
+validated against Bot grants, the app catalogue and the current account connection. Recall repeats
+these checks, including account disconnection and revocation of the exact action. Source attribution
+is a model declaration validated against access; it is not proof that the fact is true. Existing
+conversation history is not retroactively erased by revocation.
+
+Migration 0053 changes observed-memory deduplication from owner/content to owner/Bot/content. It
+preserves all existing records and deletion tombstones; forgotten facts stay forgotten for the Bot
+that recorded them. A second Bot may record the same fact independently. Records previously suppressed
+by the old unique index cannot be reconstructed. Legacy observations without source references remain
+visible to the owner with an “Origin unverified” explanation and are excluded from Bot recall, even
+if marked reviewed. No source is inferred from old app labels. Explicit cross-Bot sharing controls,
+recall ranking and PDF parsing are deferred.

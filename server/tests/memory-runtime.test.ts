@@ -130,3 +130,35 @@ test("memory database failures stop the AGUI run visibly", async () => {
     }),
   ).rejects.toThrow("memory read failed");
 });
+
+test("resource warnings have independent context and stale warnings disappear after recovery", async () => {
+  let warning = "Host memory pressure is critical.";
+  const middleware = new PersonalMemoryMiddleware(
+    "selected",
+    async () => warning,
+    { id: "openbot:resource-status", description: "OpenBot resource status" },
+  );
+  const agent = new SelectedAgent({ agentId: "selected" });
+  const first = input();
+  first.messages.unshift({
+    id: "openbot:personal-memory",
+    role: "system",
+    content: "Keep personal memory",
+  });
+  await lastValueFrom(middleware.run(first, agent).pipe(toArray()));
+  expect(agent.requests[0]?.messages[0]?.id).toBe("openbot:resource-status");
+  warning = "";
+  await lastValueFrom(
+    middleware.run(agent.requests[0]!, agent).pipe(toArray()),
+  );
+  expect(
+    agent.requests[1]?.messages.some(
+      (message) => message.id === "openbot:resource-status",
+    ),
+  ).toBe(false);
+  expect(
+    agent.requests[1]?.messages.some(
+      (message) => message.id === "openbot:personal-memory",
+    ),
+  ).toBe(true);
+});
