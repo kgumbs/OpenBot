@@ -1,4 +1,5 @@
 import { RunProgress, runFailureMessage } from "./run-progress";
+import { TaskEvidence } from "./task-evidence";
 import type { Message } from "@ag-ui/core";
 import {
   type Attachment,
@@ -1022,6 +1023,45 @@ export function ChannelChat({
                   }
                   messages={agent.messages}
                 />
+                <TaskEvidence
+                  messages={agent.messages}
+                  running={
+                    agent.isRunning || turnsInFlight > 0 || runsInFlight > 0
+                  }
+                />
+                {runError && (
+                  <div className="pb-2 text-sm" role="alert">
+                    <p>{runError}</p>
+                    <a className="underline" href="/admin/computers">
+                      Check System health and Bot tools
+                    </a>
+                    <p>
+                      Review partial results first. Continuing sends a new
+                      request and does not prove earlier actions failed.
+                    </p>
+                    <button
+                      type="button"
+                      className="underline"
+                      disabled={
+                        agent.isRunning ||
+                        turnsInFlight > 0 ||
+                        runsInFlight > 0 ||
+                        !channel.active ||
+                        !isReady ||
+                        restoring
+                      }
+                      onClick={() =>
+                        void sayRef
+                          .current(
+                            "Continue from the last verified result. First review earlier tool outcomes. Do not repeat messages, publishing, purchases, or other external changes unless you can establish they did not happen. Identify unfinished deliverables and verify each one before reporting completion.",
+                          )
+                          .catch(() => {})
+                      }
+                    >
+                      Continue after reviewing results
+                    </button>
+                  </div>
+                )}
                 <HandoffResumeNotice
                   botId={runtimeAgentId}
                   agent={agent}

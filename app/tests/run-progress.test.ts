@@ -56,3 +56,13 @@ test("timeouts explain health and recovery without changing ordinary errors", ()
   expect(runFailureMessage("Run timed out")).toContain("System health");
   expect(runFailureMessage("No permission")).toBe("No permission");
 });
+test("dropped streams warn about uncertain external outcomes", () => {
+  const message = runFailureMessage(
+    "The socket connection was closed unexpectedly",
+  );
+  expect(message).toContain("connection was lost");
+  expect(message).toContain("Do not resend");
+});
+test("computer 404s point to tool diagnostics rather than blaming websites", () => {
+  expect(runFailureMessage("HTTP 404")).toContain("Check Bot tools");
+});

@@ -6,6 +6,7 @@ import type { AuditReader } from "../audit";
 import type { AppVariables } from "../auth/guards";
 import { requireAdmin } from "../auth/guards";
 import { DEPLOYMENT_ROUTES } from "./deployment-routes";
+import { checkComputerTools } from "./diagnostics";
 import {
   type ActionActor,
   ActionRefusedError,
@@ -96,6 +97,27 @@ export function createComputerRoutes(
   routes.get("/:botId/status", async (context) => {
     const botId = context.req.param("botId");
     return context.json(await gateway.status(botId));
+  });
+
+  const checking = new Set<string>();
+  routes.post("/:botId/diagnostics", async (context) => {
+    const denied = requireAdmin(context);
+    if (denied) return denied;
+    const botId = context.req.param("botId");
+    if (checking.has(botId))
+      return context.json(
+        { error: "A tool check is already running for this Bot." },
+        409,
+      );
+    checking.add(botId);
+    context.header("Cache-Control", "no-store");
+    try {
+      return context.json(
+        await checkComputerTools(gateway, botId, { id: context.var.actor.id }),
+      );
+    } finally {
+      checking.delete(botId);
+    }
   });
 
   routes.get("/:botId/screenshot", async (context) => {

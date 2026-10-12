@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { ComputerToolCheck } from "@/components/computer/tool-check";
 import { client } from "@/lib/client";
 import {
   PageEmpty,
@@ -308,6 +309,7 @@ function ComputersPage() {
                           : `Leaves through ${computer.egress}`}
                       {computer.updateAvailable ? " · Update available" : ""}
                     </ItemDescription>
+                    <ComputerToolCheck botId={computer.botId} />
                   </ItemContent>
                   <ItemActions>
                     {computer.updateAvailable ? (

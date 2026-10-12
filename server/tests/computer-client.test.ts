@@ -574,3 +574,14 @@ test("browser navigation and snapshot timeouts are not reported as missing eleme
     );
   }
 });
+
+test("an empty HTTP 200 cannot masquerade as a working computer route", async () => {
+  const client = clientWith(() => new Response("", { status: 200 }));
+  await expect(client.screenshot()).rejects.toThrow("invalid response");
+});
+test("a missing computer route is distinguished from a website 404", async () => {
+  const client = clientWith(() => new Response("", { status: 404 }));
+  await expect(client.navigate("https://example.com")).rejects.toThrow(
+    "tool routing failure",
+  );
+});

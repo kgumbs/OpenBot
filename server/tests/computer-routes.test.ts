@@ -244,3 +244,45 @@ test("restart is scoped to Bot access and passes the authenticated actor", async
   expect(await response.json()).toEqual({ restarted: true });
   expect(calls).toEqual([["owned", { id: member.id, userId: member.id }]]);
 });
+
+// Diagnostics can write a temporary file and change the browser tab: explicit admin POST only.
+test("tool diagnostics require administrator and Bot access", async () => {
+  let called = false;
+  const gateway = {
+    runCommand: async () => {
+      called = true;
+      throw new Error("not expected");
+    },
+  } as unknown as ComputerGateway;
+  const routes = createComputerRoutes(
+    gateway,
+    {} as PolicyStore,
+    asActor(member),
+    async () => true,
+  );
+  expect(
+    (
+      await routes.request("http://openbot.test/bot/diagnostics", {
+        method: "POST",
+      })
+    ).status,
+  ).toBe(403);
+  expect(called).toBe(false);
+  const denied = createComputerRoutes(
+    gateway,
+    {} as PolicyStore,
+    asActor(administrator),
+    async () => false,
+  );
+  expect(
+    (
+      await denied.request("http://openbot.test/bot/diagnostics", {
+        method: "POST",
+      })
+    ).status,
+  ).toBe(404);
+  expect(called).toBe(false);
+  expect(
+    (await routes.request("http://openbot.test/bot/diagnostics")).status,
+  ).toBe(404);
+});

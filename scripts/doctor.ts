@@ -69,6 +69,11 @@ export function browserImageCheck(id: string, runningDigest: string, expectedDig
   return { id: `browser.${id}.image`, status: "warn", message: "Browser container uses an older or different image than the configured local image.", action: "Schedule recreation of this computer after active work finishes, preserving its named volumes. Ordinary --restart keeps Bot computers running; see docs/local-rebuild.md." };
 }
 
+export function browserEndpointCheck(id: string, probe: Probe): Check {
+  const valid = probe.status === 200 && probe.body?.status === "ok" && typeof probe.body?.browser === "boolean" && typeof probe.body?.profile === "object" && probe.body?.profile !== null;
+  return { id: `browser.${id}.endpoint`, status: valid ? "pass" : "fail", message: valid ? "Published computer port returns the expected computer API response." : "Published computer port is unreachable or returns an unexpected response, even if the container is healthy.", ...(valid ? {} : { action: "Finish or stop active work. Check Bot tools in Admin > Computers and restart the affected computer if needed; preserve its volumes." }) };
+}
+
 export function desktopCheck(probe: Probe, processRunning: boolean | undefined): Check {
   if (probe.status !== 200 || typeof probe.body?.connected !== "boolean")
     return { id: "desktop", status: "warn", message: "Native folder broker status is unavailable.", action: "Check API health and sign-in before diagnosing folder permissions." };
@@ -192,6 +197,14 @@ export async function doctor(options: { root: string; timeout?: number; profile?
           : { code: -1, out: "" };
         const expectedDigest = imageResult.code === 0 ? imageResult.out.trim() : "";
         for (const id of ids.slice(0, 32)) {
+          const bindings = await deps.command(["docker", "container", "inspect", "--format", "{{json .NetworkSettings.Ports}}", id], timeout);
+          let published: { HostIp?: string; HostPort?: string }[] = [];
+          try { published = JSON.parse(bindings.out)?.["4100/tcp"] ?? []; } catch {}
+          const local = Array.isArray(published) ? published.find(binding => ["127.0.0.1", "0.0.0.0", "::1", "::"].includes(binding.HostIp ?? "") && /^\d{1,5}$/.test(binding.HostPort ?? "") && Number(binding.HostPort) > 0 && Number(binding.HostPort) <= 65535) : undefined;
+          if (local) {
+            const host = local.HostIp?.includes(":") ? "[::1]" : "127.0.0.1";
+            checks.push(browserEndpointCheck(id, await deps.http(`http://${host}:${local.HostPort}/health`, timeout)));
+          } else add(`browser.${id}.endpoint`, "info", "No local published computer port to probe. Stopped or network-only containers need a gateway tool check before use.");
           // Select only the image digest: never inspect container environment or credentials.
           const currentImage = await deps.command(["docker", "container", "inspect", "--format", "{{.Image}}", id], timeout);
           checks.push(browserImageCheck(id, currentImage.code === 0 ? currentImage.out.trim() : "", expectedDigest));

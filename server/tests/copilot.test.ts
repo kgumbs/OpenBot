@@ -8,6 +8,10 @@ import { BuiltInAgent } from "@copilotkit/runtime/v2";
 import { EMPTY, lastValueFrom } from "rxjs";
 import { z } from "zod";
 import { PROVENANCE_GUIDANCE } from "../../shared/bot-prompt";
+import {
+  TASK_RELIABILITY_GUIDANCE,
+  runCapabilityGuidance,
+} from "../../shared/task-reliability";
 import { createActorAgentResolver } from "../src/agents/agent-resolver";
 import { MAX_INLINED_BYTES_PER_RUN } from "../src/channels/attachment-parts";
 import { loadConfig } from "../src/config";
@@ -293,7 +297,7 @@ describe("registered Copilot agents", () => {
       model: "openai/gpt-5.6-terra",
       // The provenance rule is unconditional, so even a Bot with no tools and no computer carries
       // it. That Bot needs it most: nothing it says was read anywhere.
-      prompt: `Be helpful.\n\n${PROVENANCE_GUIDANCE}\n\n${UNTRUSTED_GUIDANCE}`,
+      prompt: `Be helpful.\n\n${PROVENANCE_GUIDANCE}\n\n${TASK_RELIABILITY_GUIDANCE}\n\n${UNTRUSTED_GUIDANCE}`,
       apiKey: "openai-secret",
     });
   });
@@ -619,6 +623,7 @@ describe("standing agent roles", () => {
         // travel in it or the Bot never hears it. Referenced rather than restated, so the assertion
         // stays exact without pinning the wording twice.
         PROVENANCE_GUIDANCE,
+        TASK_RELIABILITY_GUIDANCE,
         UNTRUSTED_GUIDANCE,
       ].join("\n\n"),
     });
@@ -643,6 +648,11 @@ describe("standing agent roles", () => {
     const sent = endpoint.requests.at(-1);
     expect(sent?.messages).toEqual([
       standingRoleMessage(profile),
+      {
+        id: "granted-tools:agent_expense",
+        role: "system",
+        content: runCapabilityGuidance([]),
+      },
       userMessage("Sort these."),
     ]);
     expect(result?.newMessages?.at(-1)?.content).toBe("Categorized.");
@@ -827,6 +837,7 @@ describe("standing agent roles", () => {
         "Reconcile corporate card statements.",
         "This standing role applies in every channel. Treat channel messages as task-specific instructions within it.",
         PROVENANCE_GUIDANCE,
+        TASK_RELIABILITY_GUIDANCE,
         UNTRUSTED_GUIDANCE,
       ].join("\n\n"),
     );
@@ -1225,7 +1236,7 @@ describe("a person's standing instructions", () => {
       // Byte for byte what a deployment had before any of this existed, which is what most people
       // on most days get.
       expect(prompt).toBe(
-        `Be helpful.\n\n${PROVENANCE_GUIDANCE}\n\n${UNTRUSTED_GUIDANCE}`,
+        `Be helpful.\n\n${PROVENANCE_GUIDANCE}\n\n${TASK_RELIABILITY_GUIDANCE}\n\n${UNTRUSTED_GUIDANCE}`,
       );
     },
   );
@@ -1667,11 +1678,14 @@ describe("a chat turn is not sent a conversation the model API refuses", () => {
     }[];
     expect(sent.map((message) => message.id)).toEqual([
       "standing-role:risk",
+      "granted-tools:risk",
       "m1",
       "m2",
       "m3",
     ]);
-    expect(sent[2]).not.toHaveProperty("toolCalls");
+    expect(sent.find((message) => message.id === "m2")).not.toHaveProperty(
+      "toolCalls",
+    );
   });
 
   test("the narrowed path is guarded, because it builds its agent the same way", async () => {

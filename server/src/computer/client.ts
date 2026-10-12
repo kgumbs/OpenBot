@@ -261,8 +261,16 @@ export function createComputerTransport(
       unknown
     > | null;
     if (!response.ok) {
+      if (response.status === 404 && !body?.error)
+        throw new ComputerUnavailableError(
+          `HTTP 404 from the Bot computer endpoint ${path}. This is a tool routing failure, not a website response. Check Bot tools in Admin > Computers before retrying.`,
+        );
       throwMappedError(response.status, body);
     }
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      throw new ComputerUnavailableError(
+        "The Bot computer returned an invalid response. Check Bot tools in Admin > Computers; a healthy container does not establish that its published port works.",
+      );
     return body as T;
   }
 

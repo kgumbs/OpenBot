@@ -12,6 +12,10 @@ import { defer, finalize, from, fromEvent, switchMap, takeUntil } from "rxjs";
 import { z } from "zod";
 import { PROVENANCE_GUIDANCE } from "../../shared/bot-prompt";
 import {
+  TASK_RELIABILITY_GUIDANCE,
+  runCapabilityGuidance,
+} from "../../shared/task-reliability";
+import {
   type ActorAgentResolver,
   CoworkerUnavailableError,
 } from "./agents/agent-resolver";
@@ -173,6 +177,7 @@ export function standingRoleMessage(
        * "Investigate policies, transaction monitoring, and control evidence."
        */
       PROVENANCE_GUIDANCE,
+      TASK_RELIABILITY_GUIDANCE,
       // And for the same reason, how to read the untrusted-content envelope its tool results carry.
       UNTRUSTED_GUIDANCE,
     ].join("\n\n"),
@@ -425,6 +430,7 @@ export function builtInAgentConfiguration(
        * it says comes from its own knowledge, and saying so is the only honest move available.
        */
       PROVENANCE_GUIDANCE,
+      TASK_RELIABILITY_GUIDANCE,
       // How to read the untrusted-content envelope every outside result arrives in.
       UNTRUSTED_GUIDANCE,
       ...(grantedToolGuidance(tools, connectedVendors)
@@ -1265,8 +1271,19 @@ function remoteAgentWithStandingRole(
    * Built from the tools this run was offered rather than from everything granted, so a narrowed
    * run is never told it holds a system it cannot reach on this turn.
    */
-  const holdingsMessageFor = (offered: GrantedTool[]) => {
-    const holdings = grantedToolGuidance(offered, connectedVendors);
+  const holdingsMessageFor = (
+    offered: GrantedTool[],
+    surfaceNames: string[],
+  ) => {
+    const holdings = [
+      grantedToolGuidance(offered, connectedVendors),
+      runCapabilityGuidance([
+        ...surfaceNames,
+        ...offered.map((tool) => tool.name),
+      ]),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     return holdings
       ? {
           id: `granted-tools:${agent.id}`,
@@ -1281,7 +1298,10 @@ function remoteAgentWithStandingRole(
     input: RunAgentInput,
     next: AbstractAgent,
   ) => {
-    const holdingsMessage = holdingsMessageFor(tools);
+    const holdingsMessage = holdingsMessageFor(
+      tools,
+      (input.tools ?? []).map((tool) => tool.name),
+    );
     const runAssertion = signRun
       ? signRun(
           agent.id,
@@ -1459,7 +1479,9 @@ function remoteAgentWithStandingRole(
         agent.headers?.["x-openbot-agent-token"] ===
           process.env.MANAGED_AGENT_TOKEN &&
         [
-          process.env.OPENBOT_LOCAL_MODEL === "true" ? process.env.LOCAL_BOT_URL : undefined,
+          process.env.OPENBOT_LOCAL_MODEL === "true"
+            ? process.env.LOCAL_BOT_URL
+            : undefined,
           process.env.PICKED_HARNESS_URL,
           process.env.MANAGED_AGENT_AG_UI_URL,
         ].some(
@@ -1639,6 +1661,25 @@ class BuiltInAgentWithSaneHistory extends BuiltInAgent {
   }
 
   run(input: RunAgentInput): Observable<BaseEvent> {
+    const offeredNames = [
+      ...("tools" in this.configuration
+        ? (this.configuration.tools ?? []).map((tool) => tool.name)
+        : []),
+      ...(input.tools ?? []).map((tool) => tool.name),
+    ];
+    const runner = new BuiltInAgent({
+      ...this.configuration,
+      ...("model" in this.configuration
+        ? {
+            prompt: [
+              "prompt" in this.configuration ? this.configuration.prompt : "",
+              runCapabilityGuidance(offeredNames),
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+          }
+        : {}),
+    });
     const answeredByResume = new Set(
       (input.resume ?? []).map((entry) => entry.interruptId),
     );
@@ -1655,7 +1696,7 @@ class BuiltInAgentWithSaneHistory extends BuiltInAgent {
      */
     if (!load)
       return nativeApprovalRun({ ...input, messages: history }, () =>
-        observeModelConnection(super.run({ ...input, messages: history })),
+        observeModelConnection(runner.run({ ...input, messages: history })),
       );
     /*
      * Deferred, because `run` has to answer with a stream straight away and reading the bytes is a
@@ -1674,7 +1715,7 @@ class BuiltInAgentWithSaneHistory extends BuiltInAgent {
       ).pipe(
         switchMap((messages) =>
           nativeApprovalRun({ ...input, messages }, () =>
-            observeModelConnection(super.run({ ...input, messages })),
+            observeModelConnection(runner.run({ ...input, messages })),
           ),
         ),
       ),

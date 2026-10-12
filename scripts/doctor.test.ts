@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { doctor, desktopCheck, intelligenceCheck, report, dependencies, browserImageCheck, type Dependencies } from "./doctor";
+import { doctor, desktopCheck, intelligenceCheck, report, dependencies, browserImageCheck, browserEndpointCheck, type Dependencies } from "./doctor";
 
 const root = "/moved/OpenBot";
 function fixture(overrides: Partial<Dependencies> = {}) {
@@ -7,10 +7,10 @@ function fixture(overrides: Partial<Dependencies> = {}) {
   const deps: Dependencies = {
     bunVersion: "1.3.14", which: () => true, executable: async () => true,
     read: async path => path.endsWith("/.env") ? "CLAUDE_CODE_OAUTH_TOKEN=secret-test-token\nINTELLIGENCE_API_KEY=secret-project\nINTELLIGENCE_API_URL=https://example.invalid\nINTELLIGENCE_GATEWAY_WS_URL=wss://example.invalid" : path.endsWith("package.json") ? '{"packageManager":"bun@1.3.14"}' : undefined,
-    http: async url => ({ status: 200, body: url.endsWith("/info") ? { mode: "intelligence", agents: { bot: {} }, licenseStatus: "valid", runtimeEntitlements: { status: "ready" } } : url.endsWith("/host-access") ? { connected: true, grants: [] } : url.includes(":4212/") ? { ok: true, harness: "claude-agent-sdk" } : { status: "ok" } }),
+    http: async url => ({ status: 200, body: url.endsWith("/info") ? { mode: "intelligence", agents: { bot: {} }, licenseStatus: "valid", runtimeEntitlements: { status: "ready" } } : url.endsWith("/host-access") ? { connected: true, grants: [] } : url.includes(":54000/") ? { status: "ok", browser: false, profile: {} } : url.includes(":4212/") ? { ok: true, harness: "claude-agent-sdk" } : { status: "ok" } }),
     command: async args => {
       commands.push(args);
-      return { code: 0, out: args.includes("inspect") ? `sha256:${"a".repeat(64)}` : args[0] === "ps" ? `${root}/desktop/src-tauri/target/debug/openbot-desktop\n` : args.includes("psql") ? "schema-ready\n" : args.includes("exec") ? "writable\n1000\nsandbox-on\n" : args.includes("agent-computer") ? '[{"ID":"abcdef123456"}]' : args.includes("-a") ? "" : '"29.0.1"' };
+      return { code: 0, out: args.includes("{{json .NetworkSettings.Ports}}") ? '{"4100/tcp":[{"HostIp":"127.0.0.1","HostPort":"54000"}]}' : args.includes("inspect") ? `sha256:${"a".repeat(64)}` : args[0] === "ps" ? `${root}/desktop/src-tauri/target/debug/openbot-desktop\n` : args.includes("psql") ? "schema-ready\n" : args.includes("exec") ? "writable\n1000\nsandbox-on\n" : args.includes("agent-computer") ? '[{"ID":"abcdef123456"}]' : args.includes("-a") ? "" : '"29.0.1"' };
     }, ...overrides,
   };
   return { deps, commands };
@@ -133,4 +133,12 @@ test("Doctor reads narrow digest fields and warns when a computer needs recreati
   expect(check(r, "browser.abcdef123456.image")?.status).toBe("warn");
   expect(r.state).toBe("degraded");
   expect(f.commands.find(a => a[1] === "image")).toContain("{{.Id}}");
+});
+
+test("published browser ports must return computer metadata, not empty HTTP 200", () => {
+  expect(browserEndpointCheck("id", { status: 200 }).status).toBe("fail");
+  expect(browserEndpointCheck("id", { status: 200, body: { status: "ok" } }).status).toBe("fail");
+  expect(browserEndpointCheck("id", { status: 404, body: { error: "private-error" } }).status).toBe("fail");
+  expect(JSON.stringify(browserEndpointCheck("id", { status: 404, body: { error: "private-error" } }))).not.toContain("private-error");
+  expect(browserEndpointCheck("id", { status: 200, body: { status: "ok", browser: false, profile: {} } }).status).toBe("pass");
 });
